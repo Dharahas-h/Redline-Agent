@@ -6,6 +6,11 @@ const LABELS: Record<string, string> = {
   modified: "Modified",
 };
 
+const MATERIALITY_LABELS: Record<string, string> = {
+  substantive: "Substantive",
+  cosmetic: "Cosmetic",
+};
+
 export function ChangeCard({ change }: { change: Change }) {
   return (
     <article className="change-card" data-testid="change-card">
@@ -13,7 +18,23 @@ export function ChangeCard({ change }: { change: Change }) {
         <span className="change-type" data-testid="change-type">
           {LABELS[change.change_type] ?? change.change_type}
         </span>
+        {change.materiality && (
+          <span
+            className={`materiality-badge ${change.materiality}`}
+            data-testid="materiality-badge"
+          >
+            {MATERIALITY_LABELS[change.materiality] ?? change.materiality}
+          </span>
+        )}
       </header>
+      {change.summary && (
+        <div className="summary" data-testid="summary" data-machine-generated="true">
+          <p>{change.summary}</p>
+          <small className="disclaimer">
+            Machine-generated — attorney work-product for review.
+          </small>
+        </div>
+      )}
       {change.raw_before !== null && (
         <div className="raw before">
           <h4>Before</h4>

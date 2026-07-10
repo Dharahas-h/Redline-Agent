@@ -61,8 +61,10 @@ export async function listRounds(negotiationId: number): Promise<Round[]> {
 
 export async function getRoundChanges(
   roundId: number,
+  materiality?: string,
 ): Promise<RoundChanges> {
-  return json(await fetch(`${BASE}/rounds/${roundId}/changes`));
+  const query = materiality ? `?materiality=${encodeURIComponent(materiality)}` : "";
+  return json(await fetch(`${BASE}/rounds/${roundId}/changes${query}`));
 }
 
 export async function getChange(changeId: number): Promise<Change> {

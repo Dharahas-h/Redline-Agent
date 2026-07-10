@@ -6,6 +6,7 @@ import { ChangeCard } from "./ChangeCard";
 export function ChangeFeed({ roundId }: { roundId: number }) {
   const [data, setData] = useState<RoundChanges | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [hideCosmetic, setHideCosmetic] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -13,8 +14,11 @@ export function ChangeFeed({ roundId }: { roundId: number }) {
     setData(null);
     setError(null);
 
+    // Server-side materiality filter: hide cosmetic == substantive-only.
+    const materiality = hideCosmetic ? "substantive" : undefined;
+
     const poll = () => {
-      getRoundChanges(roundId)
+      getRoundChanges(roundId, materiality)
         .then((d) => {
           if (!active) return;
           setData(d);
@@ -31,21 +35,35 @@ export function ChangeFeed({ roundId }: { roundId: number }) {
       active = false;
       clearTimeout(timer);
     };
-  }, [roundId]);
+  }, [roundId, hideCosmetic]);
 
   if (error) return <p role="alert">Failed to load changes: {error}</p>;
   if (!data) return <p>Loading changes…</p>;
   if (data.status !== "ready")
     return <p data-testid="round-status">Round is {data.status}…</p>;
-  if (data.changes.length === 0)
-    return <p data-testid="no-changes">No changes in this round.</p>;
 
   return (
     <section className="change-feed" data-testid="change-feed">
-      <h3>{data.changes.length} changed clauses</h3>
-      {data.changes.map((c) => (
-        <ChangeCard key={c.id} change={c} />
-      ))}
+      <div className="feed-controls">
+        <label>
+          <input
+            type="checkbox"
+            checked={hideCosmetic}
+            onChange={(e) => setHideCosmetic(e.target.checked)}
+          />
+          Hide cosmetic changes
+        </label>
+      </div>
+      {data.changes.length === 0 ? (
+        <p data-testid="no-changes">No changes in this round.</p>
+      ) : (
+        <>
+          <h3>{data.changes.length} changed clauses</h3>
+          {data.changes.map((c) => (
+            <ChangeCard key={c.id} change={c} />
+          ))}
+        </>
+      )}
     </section>
   );
 }

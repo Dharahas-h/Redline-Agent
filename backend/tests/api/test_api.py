@@ -111,6 +111,37 @@ async def test_upload_two_rounds_and_see_changes(client):
     assert single.json()["id"] == change["id"]
 
 
+async def test_feed_surfaces_interpretation_and_filters_by_materiality(client):
+    neg = (
+        await client.post(
+            "/negotiations", json={"title": "M", "represented_party": "Buyer"}
+        )
+    ).json()
+    await _upload(client, neg["id"], "Buyer", ROUND_1)
+    r2 = await _upload(client, neg["id"], "Seller", ROUND_2)
+    round2_id = r2.json()["id"]
+
+    payload = (await client.get(f"/rounds/{round2_id}/changes")).json()
+    change = payload["changes"][0]
+    assert change["summary"] is not None
+    assert change["materiality"] == "substantive"
+
+    # Hiding cosmetic keeps the substantive change...
+    substantive = (
+        await client.get(
+            f"/rounds/{round2_id}/changes", params={"materiality": "substantive"}
+        )
+    ).json()
+    assert len(substantive["changes"]) == 1
+    # ...and filtering to cosmetic hides it.
+    cosmetic = (
+        await client.get(
+            f"/rounds/{round2_id}/changes", params={"materiality": "cosmetic"}
+        )
+    ).json()
+    assert cosmetic["changes"] == []
+
+
 async def test_rounds_listed_for_negotiation(client):
     neg = (
         await client.post(

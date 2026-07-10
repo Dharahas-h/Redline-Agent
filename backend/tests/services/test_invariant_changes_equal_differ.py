@@ -2,14 +2,16 @@
 produces.
 
 Decision #1: nothing may invent, add, or drop changes. Here we drive the full
-RoundService pipeline, then independently recompute the differ output from the
-persisted clauses and assert the two sets are identical. The interpreter (added
-in a later slice) will be re-checked against this same invariant with a
-garbage-returning fake.
+RoundService pipeline with a garbage-returning ``FakeInterpreter``, then
+independently recompute the differ output from the persisted clauses and assert
+the two sets are identical. Interpretation only annotates changes; it may never
+alter the set the deterministic differ produced.
 """
 
 import pytest
 
+from redline_agent.domain import Materiality
+from redline_agent.infra.llm.interpreter import FakeInterpreter
 from redline_agent.pipeline.aligner import align_positional
 from redline_agent.pipeline.differ import diff_pairs
 from redline_agent.repositories.repos import ClauseRepository, RoundRepository
@@ -26,7 +28,10 @@ def _key(change_type, before, after):
 
 async def test_persisted_changes_equal_differ_output(session_factory, blob_store):
     negotiations = NegotiationService(session_factory)
-    rounds = RoundService(session_factory, blob_store)
+    garbage = FakeInterpreter(
+        summary="!!! not a real summary !!!", materiality=Materiality.COSMETIC
+    )
+    rounds = RoundService(session_factory, blob_store, garbage)
     feed = ChangeQueryService(session_factory)
 
     neg = await negotiations.create("Matter", "Buyer", TENANT)

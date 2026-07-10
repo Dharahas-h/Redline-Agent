@@ -2,7 +2,7 @@
 
 import pytest
 
-from redline_agent.domain import ChangeType, RoundStatus
+from redline_agent.domain import ChangeType, Materiality, RoundStatus
 from redline_agent.services.change_query import ChangeQueryService
 from redline_agent.services.negotiation import NegotiationService
 from redline_agent.services.round_service import RoundService
@@ -30,10 +30,10 @@ ROUND_2 = make_docx(
 
 
 @pytest.fixture
-def services(session_factory, blob_store):
+def services(session_factory, blob_store, interpreter):
     return (
         NegotiationService(session_factory),
-        RoundService(session_factory, blob_store),
+        RoundService(session_factory, blob_store, interpreter),
         ChangeQueryService(session_factory),
     )
 
@@ -80,6 +80,48 @@ async def test_second_round_produces_clause_centric_changes(services):
     added = next(c for c in changes if c.change_type is ChangeType.ADDED)
     assert added.raw_before is None
     assert "Confidentiality" in added.raw_after
+
+
+async def test_material_changes_are_interpreted(services):
+    negotiations, rounds, feed = services
+    neg = await negotiations.create("Acme MSA", "Buyer", TENANT)
+    await _upload(rounds, neg.id, "Buyer", ROUND_1)
+    r2 = await _upload(rounds, neg.id, "Seller", ROUND_2)
+
+    changes = await feed.feed(r2.id, TENANT)
+    for c in changes:
+        assert c.summary is not None
+        assert c.materiality is Materiality.SUBSTANTIVE
+        assert c.interpretation_model == "fake"
+
+
+async def test_cosmetic_change_is_tagged_without_the_llm(services):
+    negotiations, rounds, feed = services
+    neg = await negotiations.create("Acme MSA", "Buyer", TENANT)
+    await _upload(rounds, neg.id, "Buyer", ROUND_1)
+    # Round 2 differs from round 1 only by case + trailing punctuation -> cosmetic.
+    cosmetic = make_docx(
+        [
+            "1. Payment",
+            "Buyer shall pay within 30 days",
+            "2. Term",
+            "this agreement lasts one year.",
+        ]
+    )
+    r2 = await _upload(rounds, neg.id, "Seller", cosmetic)
+
+    changes = await feed.feed(r2.id, TENANT)
+    assert changes  # the differ still detected the deltas
+    assert all(c.materiality is Materiality.COSMETIC for c in changes)
+    assert all(c.interpretation_model is None for c in changes)
+
+    # And the materiality filter can hide them.
+    from redline_agent.services.change_query import ChangeFilters
+
+    visible = await feed.feed(
+        r2.id, TENANT, ChangeFilters(materiality="substantive")
+    )
+    assert visible == []
 
 
 async def test_first_round_has_no_changes(services):

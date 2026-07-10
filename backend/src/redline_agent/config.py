@@ -18,6 +18,13 @@ class Settings(BaseSettings):
     # single-tenant operation in v1 (decision #8); schema is tenant-ready.
     default_tenant_id: str = "default"
 
+    # LLM interpreter (decision #7). When these are set the Azure OpenAI
+    # interpreter is used; otherwise the deterministic offline fake stands in.
+    azure_openai_api_key: str | None = None
+    azure_openai_endpoint: str | None = None
+    azure_openai_deployment: str | None = None
+    azure_openai_api_version: str = "2024-06-01"
+
 
 def get_settings() -> Settings:
     return Settings()

@@ -21,9 +21,11 @@ from redline_agent.domain import (
     RoundStatus,
 )
 from redline_agent.infra.blob_store import BlobStore
+from redline_agent.infra.llm.interpreter import LLMInterpreter
 from redline_agent.pipeline.aligner import align_positional
 from redline_agent.pipeline.differ import diff_pairs
 from redline_agent.pipeline.flatten import flatten_docx
+from redline_agent.pipeline.interpreter import interpret_changes
 from redline_agent.pipeline.segmenter import segment
 from redline_agent.repositories.repos import (
     ChangeRepository,
@@ -38,9 +40,11 @@ class RoundService:
         self,
         session_factory: async_sessionmaker[AsyncSession],
         blob_store: BlobStore,
+        interpreter: LLMInterpreter,
     ) -> None:
         self._session_factory = session_factory
         self._blob_store = blob_store
+        self._interpreter = interpreter
 
     async def create_round(
         self,
@@ -148,6 +152,9 @@ class RoundService:
                 for d in diffs
             ]
             if changes:
+                # Interpretation annotates the changes; it never alters the set
+                # the deterministic differ produced (decision #1).
+                await interpret_changes(changes, self._interpreter)
                 await changes_repo.create_many(changes)
 
         await rounds.set_status(round_.id, RoundStatus.READY)

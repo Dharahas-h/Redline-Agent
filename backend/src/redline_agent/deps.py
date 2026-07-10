@@ -25,7 +25,9 @@ def get_negotiation_service(request: Request) -> NegotiationService:
 
 def get_round_service(request: Request) -> RoundService:
     return RoundService(
-        request.app.state.session_factory, request.app.state.blob_store
+        request.app.state.session_factory,
+        request.app.state.blob_store,
+        request.app.state.interpreter,
     )
 
 

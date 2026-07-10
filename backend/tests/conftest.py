@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from redline_agent.infra.blob_store import InMemoryBlobStore
+from redline_agent.infra.llm.interpreter import FakeInterpreter
 from redline_agent.repositories.orm import Base
 
 TENANT = "test-tenant"
@@ -39,3 +40,9 @@ def session_factory(engine):
 @pytest_asyncio.fixture
 def blob_store():
     return InMemoryBlobStore()
+
+
+@pytest_asyncio.fixture
+def interpreter():
+    """A deterministic, offline interpreter for orchestration tests."""
+    return FakeInterpreter(summary="Machine-generated summary.")
