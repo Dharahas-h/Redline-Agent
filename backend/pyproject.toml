@@ -1,0 +1,37 @@
+[project]
+name = "redline-agent"
+version = "0.1.0"
+description = "Multi-round negotiation tracker for .docx legal contracts"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "sqlalchemy>=2.0",
+    "aiosqlite",
+    "asyncpg",
+    "python-docx",
+    "lxml",
+    "python-multipart",
+    "pydantic>=2",
+    "pydantic-settings",
+    "alembic",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx",
+    "pytest",
+    "pytest-asyncio",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["src"]
