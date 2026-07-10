@@ -101,6 +101,21 @@ class ClauseLineageRow(Base):
     overridden: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+class ExportRow(Base):
+    __tablename__ = "exports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, index=True)
+    negotiation_id: Mapped[int] = mapped_column(
+        ForeignKey("negotiations.id"), index=True
+    )
+    from_round_id: Mapped[int] = mapped_column(ForeignKey("rounds.id"))
+    to_round_id: Mapped[int] = mapped_column(ForeignKey("rounds.id"))
+    filename: Mapped[str] = mapped_column(String)
+    blob_uri: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
 class ChangeRow(Base):
     __tablename__ = "changes"
 

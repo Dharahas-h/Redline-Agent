@@ -6,7 +6,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from redline_agent.domain import Change, Negotiation, Round
+from redline_agent.domain import Change, Export, Negotiation, Round
 
 
 class NegotiationCreate(BaseModel):
@@ -52,6 +52,26 @@ class RoundOut(BaseModel):
 
 class NegotiationDetailOut(NegotiationOut):
     rounds: list[RoundOut] = []
+
+
+class ExportOut(BaseModel):
+    id: int
+    negotiation_id: int
+    from_round_id: int
+    to_round_id: int
+    filename: str
+    created_at: datetime | None = None
+
+    @classmethod
+    def of(cls, e: Export) -> "ExportOut":
+        return cls(
+            id=e.id,
+            negotiation_id=e.negotiation_id,
+            from_round_id=e.from_round_id,
+            to_round_id=e.to_round_id,
+            filename=e.filename,
+            created_at=e.created_at,
+        )
 
 
 class ChangeOut(BaseModel):

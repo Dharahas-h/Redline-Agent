@@ -41,3 +41,12 @@ export interface RoundChanges {
   status: string;
   changes: Change[];
 }
+
+export interface Export {
+  id: number;
+  negotiation_id: number;
+  from_round_id: number;
+  to_round_id: number;
+  filename: string;
+  created_at?: string | null;
+}

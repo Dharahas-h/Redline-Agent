@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { getNegotiation, listRounds, uploadRound } from "../api/client";
 import type { NegotiationDetail as Detail, Round } from "../types";
 import { ChangeFeed } from "../components/ChangeFeed";
+import { ExportButton } from "../components/ExportButton";
 
 export function NegotiationDetail({ negotiationId }: { negotiationId: number }) {
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -47,6 +48,8 @@ export function NegotiationDetail({ negotiationId }: { negotiationId: number }) 
         <input aria-label="round-file" type="file" accept=".docx" ref={fileRef} />
         <button type="submit">Upload round</button>
       </form>
+
+      <ExportButton negotiationId={negotiationId} />
 
       <h3>Rounds</h3>
       <ul>

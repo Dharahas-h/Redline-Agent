@@ -2,6 +2,7 @@
 
 import type {
   Change,
+  Export,
   Negotiation,
   NegotiationDetail,
   Round,
@@ -66,4 +67,18 @@ export async function getRoundChanges(
 
 export async function getChange(changeId: number): Promise<Change> {
   return json(await fetch(`${BASE}/changes/${changeId}`));
+}
+
+export async function createExport(negotiationId: number): Promise<Export> {
+  return json(
+    await fetch(`${BASE}/negotiations/${negotiationId}/export`, {
+      method: "POST",
+    }),
+  );
+}
+
+// The download URL for a generated redline; used as an anchor href so the
+// browser handles the .docx attachment download.
+export function exportDownloadUrl(exportId: number): string {
+  return `${BASE}/exports/${exportId}`;
 }

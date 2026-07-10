@@ -10,6 +10,7 @@ from __future__ import annotations
 from fastapi import Request
 
 from redline_agent.services.change_query import ChangeQueryService
+from redline_agent.services.export import ExportService
 from redline_agent.services.negotiation import NegotiationService
 from redline_agent.services.round_service import RoundService
 
@@ -30,3 +31,9 @@ def get_round_service(request: Request) -> RoundService:
 
 def get_change_query_service(request: Request) -> ChangeQueryService:
     return ChangeQueryService(request.app.state.session_factory)
+
+
+def get_export_service(request: Request) -> ExportService:
+    return ExportService(
+        request.app.state.session_factory, request.app.state.blob_store
+    )

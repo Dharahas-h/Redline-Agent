@@ -74,6 +74,24 @@ class ClauseLineage:
 
 
 @dataclass
+class Export:
+    """A generated tracked-changes ``.docx`` (latest round vs prior).
+
+    The bytes live in the blob store; this row records what was exported and
+    points at them by ``blob_uri``.
+    """
+
+    negotiation_id: int
+    from_round_id: int
+    to_round_id: int
+    tenant_id: str
+    filename: str
+    blob_uri: str | None = None
+    id: int | None = None
+    created_at: datetime | None = None
+
+
+@dataclass
 class Change:
     """A detected delta between a pair of aligned clauses across two rounds.
 

@@ -10,6 +10,7 @@ from redline_agent.domain.models import (
     Change,
     Clause,
     ClauseLineage,
+    Export,
     Negotiation,
     Round,
 )
@@ -22,6 +23,7 @@ __all__ = [
     "Change",
     "Clause",
     "ClauseLineage",
+    "Export",
     "Negotiation",
     "Round",
 ]

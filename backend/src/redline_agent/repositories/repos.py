@@ -18,6 +18,7 @@ from redline_agent.domain import (
     ChangeType,
     Clause,
     ClauseLineage,
+    Export,
     Materiality,
     Negotiation,
     Round,
@@ -27,6 +28,7 @@ from redline_agent.repositories.orm import (
     ChangeRow,
     ClauseLineageRow,
     ClauseRow,
+    ExportRow,
     NegotiationRow,
     RoundRow,
 )
@@ -232,6 +234,43 @@ class ClauseLineageRepository:
         await self._session.flush()
         lineage.id = row.id
         return lineage
+
+
+def _to_export(row: ExportRow) -> Export:
+    return Export(
+        id=row.id,
+        tenant_id=row.tenant_id,
+        negotiation_id=row.negotiation_id,
+        from_round_id=row.from_round_id,
+        to_round_id=row.to_round_id,
+        filename=row.filename,
+        blob_uri=row.blob_uri,
+        created_at=row.created_at,
+    )
+
+
+class ExportRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create(self, export: Export) -> Export:
+        row = ExportRow(
+            tenant_id=export.tenant_id,
+            negotiation_id=export.negotiation_id,
+            from_round_id=export.from_round_id,
+            to_round_id=export.to_round_id,
+            filename=export.filename,
+            blob_uri=export.blob_uri,
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return _to_export(row)
+
+    async def get(self, export_id: int, tenant_id: str) -> Export | None:
+        row = await self._session.get(ExportRow, export_id)
+        if row is None or row.tenant_id != tenant_id:
+            return None
+        return _to_export(row)
 
 
 class ChangeRepository:
