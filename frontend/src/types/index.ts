@@ -42,10 +42,24 @@ export interface Change {
   overridden: boolean;
 }
 
+// A structural alert surfaced alongside the feed: a defined-term definition
+// change (with its reference ripple count) or a table change flagged for manual
+// review. Not a change — the deterministic differ owns the change set.
+export type AlertType = "definition_changed" | "table_changed";
+
+export interface StructuralAlert {
+  id: number;
+  alert_type: AlertType;
+  subject: string | null;
+  detail: string;
+  affected_clause_count: number | null;
+}
+
 export interface RoundChanges {
   round_id: number;
   status: string;
   changes: Change[];
+  alerts: StructuralAlert[];
 }
 
 // One round's view of a clause in its cross-round lineage.

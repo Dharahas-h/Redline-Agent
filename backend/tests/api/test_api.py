@@ -111,6 +111,68 @@ async def test_upload_two_rounds_and_see_changes(client):
     assert single.json()["id"] == change["id"]
 
 
+DEFS_1 = make_docx(
+    [
+        "1. Definitions",
+        '"Confidential Information" means non-public data disclosed orally.',
+        "2. Obligations",
+        "Each party shall protect Confidential Information.",
+    ]
+)
+DEFS_2 = make_docx(
+    [
+        "1. Definitions",
+        '"Confidential Information" means non-public data disclosed in writing.',
+        "2. Obligations",
+        "Each party shall protect Confidential Information.",
+    ]
+)
+TABLE_1 = make_docx(
+    ["1. Pricing", "See the schedule below."],
+    tables=[[["Item", "Price"], ["Widget", "$10"]]],
+)
+TABLE_2 = make_docx(
+    ["1. Pricing", "See the schedule below."],
+    tables=[[["Item", "Price"], ["Widget", "$15"]]],
+)
+
+
+async def test_feed_surfaces_structural_alerts(client):
+    neg = (
+        await client.post(
+            "/negotiations", json={"title": "NDA", "represented_party": "Buyer"}
+        )
+    ).json()
+    await _upload(client, neg["id"], "Buyer", DEFS_1)
+    r2 = await _upload(client, neg["id"], "Seller", DEFS_2)
+    round2_id = r2.json()["id"]
+
+    payload = (await client.get(f"/rounds/{round2_id}/changes")).json()
+    (alert,) = payload["alerts"]
+    assert alert["alert_type"] == "definition_changed"
+    assert alert["subject"] == "Confidential Information"
+    assert alert["affected_clause_count"] == 1
+    assert "Confidential Information" in alert["detail"]
+
+
+async def test_feed_surfaces_table_alert_even_with_no_changes(client):
+    neg = (
+        await client.post(
+            "/negotiations", json={"title": "MSA", "represented_party": "Buyer"}
+        )
+    ).json()
+    await _upload(client, neg["id"], "Buyer", TABLE_1)
+    r2 = await _upload(client, neg["id"], "Seller", TABLE_2)
+    round2_id = r2.json()["id"]
+
+    payload = (await client.get(f"/rounds/{round2_id}/changes")).json()
+    # Clause text is identical, so no change cards — but the table alert stands.
+    assert payload["changes"] == []
+    (alert,) = payload["alerts"]
+    assert alert["alert_type"] == "table_changed"
+    assert "review manually" in alert["detail"]
+
+
 async def test_feed_surfaces_interpretation_and_filters_by_materiality(client):
     neg = (
         await client.post(

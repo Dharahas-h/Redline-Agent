@@ -57,6 +57,9 @@ class RoundRow(Base):
     submitted_by_party: Mapped[str] = mapped_column(String)
     blob_uri: Mapped[str | None] = mapped_column(String, nullable=True)
     canonical_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # JSON list of per-table cell-text signatures (tables are excluded from
+    # canonical_text; decision #6). Null for rounds ingested before this column.
+    table_signatures: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String, default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
@@ -114,6 +117,24 @@ class ExportRow(Base):
     filename: Mapped[str] = mapped_column(String)
     blob_uri: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+class StructuralAlertRow(Base):
+    __tablename__ = "structural_alerts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, index=True)
+    negotiation_id: Mapped[int] = mapped_column(
+        ForeignKey("negotiations.id"), index=True
+    )
+    from_round_id: Mapped[int] = mapped_column(ForeignKey("rounds.id"))
+    to_round_id: Mapped[int] = mapped_column(ForeignKey("rounds.id"), index=True)
+    alert_type: Mapped[str] = mapped_column(String)
+    subject: Mapped[str | None] = mapped_column(String, nullable=True)
+    detail: Mapped[str] = mapped_column(Text)
+    affected_clause_count: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
 
 
 class ChangeRow(Base):

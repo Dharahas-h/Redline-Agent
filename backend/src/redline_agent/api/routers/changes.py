@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from redline_agent.api.schemas.dto import ChangeOut
+from redline_agent.api.schemas.dto import ChangeOut, StructuralAlertOut
 from redline_agent.deps import (
     get_change_query_service,
     get_round_service,
@@ -21,6 +21,9 @@ class RoundChangesOut(BaseModel):
     round_id: int
     status: str
     changes: list[ChangeOut]
+    # Structural alerts (defined-term/table changes) surfaced prominently above
+    # the change cards; not part of the deterministic change set (decision #6).
+    alerts: list[StructuralAlertOut] = []
 
 
 class AlignmentLinkIn(BaseModel):
@@ -51,12 +54,14 @@ async def _feed_payload(
         raise HTTPException(status_code=404, detail="Round not found")
     changes = await feed.feed(round_id, tenant_id, filters)
     alignment = await feed.alignment_for_round(round_id, tenant_id)
+    alerts = await feed.structural_alerts(round_id, tenant_id)
     return RoundChangesOut(
         round_id=round_id,
         status=round_.status.value,
         changes=[
             ChangeOut.of(c, alignment.get(c.curr_clause_id)) for c in changes
         ],
+        alerts=[StructuralAlertOut.of(a) for a in alerts],
     )
 
 

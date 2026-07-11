@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from redline_agent.domain import (
+    AlertType,
     AlignMethod,
     Category,
     Change,
@@ -25,6 +26,7 @@ from redline_agent.domain import (
     Negotiation,
     Round,
     RoundStatus,
+    StructuralAlert,
 )
 from redline_agent.repositories.orm import (
     ChangeRow,
@@ -33,6 +35,7 @@ from redline_agent.repositories.orm import (
     ExportRow,
     NegotiationRow,
     RoundRow,
+    StructuralAlertRow,
 )
 
 
@@ -55,6 +58,9 @@ def _to_round(row: RoundRow) -> Round:
         submitted_by_party=row.submitted_by_party,
         blob_uri=row.blob_uri,
         canonical_text=row.canonical_text,
+        table_signatures=(
+            json.loads(row.table_signatures) if row.table_signatures else None
+        ),
         status=RoundStatus(row.status),
         created_at=row.created_at,
     )
@@ -138,6 +144,11 @@ class RoundRepository:
             submitted_by_party=round_.submitted_by_party,
             blob_uri=round_.blob_uri,
             canonical_text=round_.canonical_text,
+            table_signatures=(
+                json.dumps(round_.table_signatures)
+                if round_.table_signatures is not None
+                else None
+            ),
             status=round_.status.value,
         )
         self._session.add(row)
@@ -409,6 +420,69 @@ class ChangeRepository:
         stmt = select(ChangeRow).where(
             ChangeRow.to_round_id == to_round_id,
             ChangeRow.tenant_id == tenant_id,
+        )
+        for row in (await self._session.scalars(stmt)).all():
+            await self._session.delete(row)
+        await self._session.flush()
+
+
+def _to_alert(row: StructuralAlertRow) -> StructuralAlert:
+    return StructuralAlert(
+        id=row.id,
+        tenant_id=row.tenant_id,
+        negotiation_id=row.negotiation_id,
+        from_round_id=row.from_round_id,
+        to_round_id=row.to_round_id,
+        alert_type=AlertType(row.alert_type),
+        subject=row.subject,
+        detail=row.detail,
+        affected_clause_count=row.affected_clause_count,
+    )
+
+
+class StructuralAlertRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create_many(
+        self, alerts: list[StructuralAlert]
+    ) -> list[StructuralAlert]:
+        rows = [
+            StructuralAlertRow(
+                tenant_id=a.tenant_id,
+                negotiation_id=a.negotiation_id,
+                from_round_id=a.from_round_id,
+                to_round_id=a.to_round_id,
+                alert_type=a.alert_type.value,
+                subject=a.subject,
+                detail=a.detail,
+                affected_clause_count=a.affected_clause_count,
+            )
+            for a in alerts
+        ]
+        self._session.add_all(rows)
+        await self._session.flush()
+        return [_to_alert(r) for r in rows]
+
+    async def list_for_round(
+        self, to_round_id: int, tenant_id: str
+    ) -> list[StructuralAlert]:
+        stmt = (
+            select(StructuralAlertRow)
+            .where(
+                StructuralAlertRow.to_round_id == to_round_id,
+                StructuralAlertRow.tenant_id == tenant_id,
+            )
+            .order_by(StructuralAlertRow.id)
+        )
+        rows = (await self._session.scalars(stmt)).all()
+        return [_to_alert(r) for r in rows]
+
+    async def delete_for_round(self, to_round_id: int, tenant_id: str) -> None:
+        """Drop this round's alerts so they can be regenerated (override re-run)."""
+        stmt = select(StructuralAlertRow).where(
+            StructuralAlertRow.to_round_id == to_round_id,
+            StructuralAlertRow.tenant_id == tenant_id,
         )
         for row in (await self._session.scalars(stmt)).all():
             await self._session.delete(row)

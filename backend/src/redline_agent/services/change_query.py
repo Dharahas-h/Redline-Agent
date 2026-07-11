@@ -11,12 +11,19 @@ from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from redline_agent.domain import Change, Clause, ClauseLineage, Round
+from redline_agent.domain import (
+    Change,
+    Clause,
+    ClauseLineage,
+    Round,
+    StructuralAlert,
+)
 from redline_agent.repositories.repos import (
     ChangeRepository,
     ClauseLineageRepository,
     ClauseRepository,
     RoundRepository,
+    StructuralAlertRepository,
 )
 
 
@@ -64,6 +71,19 @@ class ChangeQueryService:
                 round_id, tenant_id
             )
         return [c for c in changes if _matches(c, filters)]
+
+    async def structural_alerts(
+        self, round_id: int, tenant_id: str
+    ) -> list[StructuralAlert]:
+        """Structural alerts (definition/table changes) surfaced for the round.
+
+        Distinct from the change feed — these annotate high-value structural
+        events, not the deterministic change set (decision #1, #6).
+        """
+        async with self._session_factory() as session:
+            return await StructuralAlertRepository(session).list_for_round(
+                round_id, tenant_id
+            )
 
     async def get(self, change_id: int, tenant_id: str) -> Change | None:
         async with self._session_factory() as session:

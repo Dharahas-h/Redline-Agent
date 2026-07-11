@@ -22,28 +22,33 @@ from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from redline_agent.domain import (
+    AlertType,
     AlignMethod,
     Change,
     Clause,
     ClauseLineage,
     Round,
     RoundStatus,
+    StructuralAlert,
 )
 from redline_agent.infra.blob_store import BlobStore
 from redline_agent.infra.embedder import Embedder
 from redline_agent.infra.llm.adjudicator import AlignmentAdjudicator
 from redline_agent.infra.llm.interpreter import LLMInterpreter
 from redline_agent.pipeline.aligner import AlignmentPair, align, align_positional
+from redline_agent.pipeline.defined_terms import detect_definition_changes
 from redline_agent.pipeline.differ import diff_pairs
 from redline_agent.pipeline.flatten import flatten_docx
 from redline_agent.pipeline.interpreter import interpret_changes
 from redline_agent.pipeline.segmenter import segment
+from redline_agent.pipeline.tables import detect_table_changes, extract_table_signatures
 from redline_agent.repositories.repos import (
     ChangeRepository,
     ClauseLineageRepository,
     ClauseRepository,
     NegotiationRepository,
     RoundRepository,
+    StructuralAlertRepository,
 )
 
 
@@ -85,6 +90,7 @@ class RoundService:
     ) -> Round:
         """Store the blob, flatten, and persist a pending round snapshot."""
         canonical_text = flatten_docx(data)
+        table_signatures = extract_table_signatures(data)
         async with self._session_factory() as session:
             rounds = RoundRepository(session)
             round_no = await rounds.next_round_no(negotiation_id, tenant_id)
@@ -99,6 +105,7 @@ class RoundService:
                     tenant_id=tenant_id,
                     blob_uri=blob_uri,
                     canonical_text=canonical_text,
+                    table_signatures=table_signatures,
                     status=RoundStatus.PENDING,
                 )
             )
@@ -216,6 +223,68 @@ class RoundService:
         if changes:
             await interpret_changes(changes, self._interpreter, represented_party)
             await changes_repo.create_many(changes)
+
+        await self._regenerate_alerts(session, round_, prior, pairs, tenant_id)
+
+    async def _regenerate_alerts(
+        self,
+        session: AsyncSession,
+        round_: Round,
+        prior: Round,
+        pairs: list[AlignmentPair],
+        tenant_id: str,
+    ) -> None:
+        """Rebuild the round's structural alerts from the diffed pairs.
+
+        Structural alerts (definition changes, table changes) are surfaced
+        alongside the change feed but are *not* changes — the deterministic
+        differ still owns the change set (decision #1). Existing alerts are
+        cleared first so this is idempotent on an override re-run.
+        """
+        alerts_repo = StructuralAlertRepository(session)
+        await alerts_repo.delete_for_round(round_.id, tenant_id)
+
+        prev_texts = [p.prev.text for p in pairs if p.prev is not None]
+        curr_texts = [p.curr.text for p in pairs if p.curr is not None]
+
+        alerts: list[StructuralAlert] = []
+        for dc in detect_definition_changes(prev_texts, curr_texts):
+            noun = "clause" if dc.affected_clause_count == 1 else "clauses"
+            alerts.append(
+                StructuralAlert(
+                    negotiation_id=round_.negotiation_id,
+                    from_round_id=prior.id,
+                    to_round_id=round_.id,
+                    alert_type=AlertType.DEFINITION_CHANGED,
+                    subject=dc.term,
+                    detail=(
+                        f'Definition of "{dc.term}" changed — affects '
+                        f"{dc.affected_clause_count} {noun}."
+                    ),
+                    affected_clause_count=dc.affected_clause_count,
+                    tenant_id=tenant_id,
+                )
+            )
+
+        table_changes = detect_table_changes(
+            prior.table_signatures or [], round_.table_signatures or []
+        )
+        for tc in table_changes:
+            alerts.append(
+                StructuralAlert(
+                    negotiation_id=round_.negotiation_id,
+                    from_round_id=prior.id,
+                    to_round_id=round_.id,
+                    alert_type=AlertType.TABLE_CHANGED,
+                    subject=None,
+                    detail=f"Table {tc.position} was {tc.kind} — review manually.",
+                    affected_clause_count=None,
+                    tenant_id=tenant_id,
+                )
+            )
+
+        if alerts:
+            await alerts_repo.create_many(alerts)
 
     async def override_alignment(
         self, round_id: int, tenant_id: str, links: list[AlignmentLink]

@@ -77,12 +77,14 @@ const READY: RoundChanges = {
   round_id: 2,
   status: "ready",
   changes: [LOW_CONF, OTHER],
+  alerts: [],
 };
 
 const REGENERATED: RoundChanges = {
   round_id: 2,
   status: "ready",
   changes: [{ ...LOW_CONF, overridden: true, low_confidence: false }, OTHER],
+  alerts: [],
 };
 
 const server = setupServer(

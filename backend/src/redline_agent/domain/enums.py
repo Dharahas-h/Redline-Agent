@@ -54,6 +54,18 @@ class FavoredParty(str, Enum):
     NEUTRAL = "neutral"
 
 
+class AlertType(str, Enum):
+    """A structural alert surfaced alongside the change feed.
+
+    Structural alerts are *not* changes — the deterministic differ remains the
+    sole authority on the set of changes (decision #1). These flag high-value
+    structural events that warrant attorney attention (decision #6).
+    """
+
+    DEFINITION_CHANGED = "definition_changed"
+    TABLE_CHANGED = "table_changed"
+
+
 class AlignMethod(str, Enum):
     """How a clause lineage link was established."""
 

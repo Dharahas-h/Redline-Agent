@@ -8,7 +8,14 @@ from pydantic import BaseModel, Field
 
 from typing import TYPE_CHECKING
 
-from redline_agent.domain import Change, ClauseLineage, Export, Negotiation, Round
+from redline_agent.domain import (
+    Change,
+    ClauseLineage,
+    Export,
+    Negotiation,
+    Round,
+    StructuralAlert,
+)
 from redline_agent.pipeline.aligner import is_low_confidence
 
 if TYPE_CHECKING:
@@ -121,6 +128,30 @@ class ChangeOut(BaseModel):
                 is_low_confidence(lineage.confidence) if lineage else False
             ),
             overridden=lineage.overridden if lineage else False,
+        )
+
+
+class StructuralAlertOut(BaseModel):
+    """A structural alert surfaced alongside the feed (definition/table change).
+
+    Not a change: rendered as a prominent banner, separate from the change
+    cards (decision #1, #6).
+    """
+
+    id: int
+    alert_type: str
+    subject: str | None = None
+    detail: str
+    affected_clause_count: int | None = None
+
+    @classmethod
+    def of(cls, a: StructuralAlert) -> "StructuralAlertOut":
+        return cls(
+            id=a.id,
+            alert_type=a.alert_type.value,
+            subject=a.subject,
+            detail=a.detail,
+            affected_clause_count=a.affected_clause_count,
         )
 
 

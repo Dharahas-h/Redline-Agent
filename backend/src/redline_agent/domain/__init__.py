@@ -1,6 +1,7 @@
 """Pure domain models and enums. No I/O, no framework imports."""
 
 from redline_agent.domain.enums import (
+    AlertType,
     AlignMethod,
     Category,
     ChangeType,
@@ -15,9 +16,11 @@ from redline_agent.domain.models import (
     Export,
     Negotiation,
     Round,
+    StructuralAlert,
 )
 
 __all__ = [
+    "AlertType",
     "AlignMethod",
     "Category",
     "ChangeType",
@@ -30,4 +33,5 @@ __all__ = [
     "Export",
     "Negotiation",
     "Round",
+    "StructuralAlert",
 ]

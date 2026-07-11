@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { getRoundChanges, updateAlignment } from "../api/client";
 import type { RoundChanges } from "../types";
 import { ChangeCard } from "./ChangeCard";
+import { StructuralAlerts } from "./StructuralAlerts";
 import type { AlignmentCandidate } from "./AlignmentOverride";
 
 const CATEGORY_OPTIONS = [
@@ -93,6 +94,7 @@ export function ChangeFeed({ roundId }: { roundId: number }) {
 
   return (
     <section className="change-feed" data-testid="change-feed">
+      <StructuralAlerts alerts={data.alerts ?? []} />
       <div className="feed-controls">
         <label>
           <input

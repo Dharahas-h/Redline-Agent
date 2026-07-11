@@ -67,6 +67,7 @@ const READY_FEED: RoundChanges = {
   round_id: 2,
   status: "ready",
   changes: [MATERIAL, COSMETIC],
+  alerts: [],
 };
 
 // Honor every filter server-side, as the real API does.
@@ -164,6 +165,48 @@ test("filters by favored-party, category, and risk", async () => {
   expect(cards).toHaveLength(1);
   expect(screen.getByTestId("risk-flag")).toHaveTextContent(
     "For attorney review: payment terms shifted.",
+  );
+});
+
+test("surfaces structural alerts prominently above the change cards", async () => {
+  server.use(
+    http.get("/rounds/:id/changes", () =>
+      HttpResponse.json({
+        round_id: 2,
+        status: "ready",
+        changes: [MATERIAL],
+        alerts: [
+          {
+            id: 1,
+            alert_type: "definition_changed",
+            subject: "Confidential Information",
+            detail:
+              'Definition of "Confidential Information" changed — affects 2 clauses.',
+            affected_clause_count: 2,
+          },
+          {
+            id: 2,
+            alert_type: "table_changed",
+            subject: null,
+            detail: "Table 1 was modified — review manually.",
+            affected_clause_count: null,
+          },
+        ],
+      }),
+    ),
+  );
+  render(<ChangeFeed roundId={2} />);
+
+  const alerts = await screen.findAllByTestId("structural-alert");
+  expect(alerts).toHaveLength(2);
+  expect(screen.getByText(/affects 2 clauses/)).toBeInTheDocument();
+  expect(screen.getByText(/review manually/)).toBeInTheDocument();
+
+  // The banner precedes the change cards in the document.
+  const banner = screen.getByTestId("structural-alerts");
+  const card = screen.getByTestId("change-card");
+  expect(banner.compareDocumentPosition(card)).toBe(
+    Node.DOCUMENT_POSITION_FOLLOWING,
   );
 });
 
