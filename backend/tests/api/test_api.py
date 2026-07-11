@@ -142,6 +142,85 @@ async def test_feed_surfaces_interpretation_and_filters_by_materiality(client):
     assert cosmetic["changes"] == []
 
 
+@pytest_asyncio.fixture
+async def annotating_client():
+    """A client whose interpreter tags every material change, so favored-party,
+    category, and risk filters have something to bite on."""
+    from redline_agent.domain import Category, FavoredParty, Materiality
+    from redline_agent.infra.llm.interpreter import FakeInterpreter
+
+    engine = create_async_engine(
+        "sqlite+aiosqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    app = create_app(
+        settings=Settings(default_tenant_id="test"),
+        blob_store=InMemoryBlobStore(),
+        engine=engine,
+        interpreter=FakeInterpreter(
+            summary="Payment window extended.",
+            materiality=Materiality.SUBSTANTIVE,
+            category=Category.PAYMENT,
+            favored_party=FavoredParty.COUNTERPARTY,
+            risk_flag="For attorney review: payment terms shifted.",
+        ),
+    )
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        yield c
+    await engine.dispose()
+
+
+async def test_feed_exposes_and_filters_favored_party_category_and_risk(
+    annotating_client,
+):
+    client = annotating_client
+    neg = (
+        await client.post(
+            "/negotiations", json={"title": "M", "represented_party": "Buyer"}
+        )
+    ).json()
+    await _upload(client, neg["id"], "Buyer", ROUND_1)
+    r2 = await _upload(client, neg["id"], "Seller", ROUND_2)
+    round2_id = r2.json()["id"]
+
+    payload = (await client.get(f"/rounds/{round2_id}/changes")).json()
+    change = payload["changes"][0]
+    assert change["favored_party"] == "counterparty"
+    assert change["category"] == "payment"
+    assert change["risk_flag"] == "For attorney review: payment terms shifted."
+
+    # Each filter narrows the feed.
+    assert (
+        await client.get(
+            f"/rounds/{round2_id}/changes", params={"favored_party": "counterparty"}
+        )
+    ).json()["changes"]
+    assert not (
+        await client.get(
+            f"/rounds/{round2_id}/changes", params={"favored_party": "represented"}
+        )
+    ).json()["changes"]
+    assert (
+        await client.get(
+            f"/rounds/{round2_id}/changes", params={"category": "payment"}
+        )
+    ).json()["changes"]
+    assert not (
+        await client.get(
+            f"/rounds/{round2_id}/changes", params={"category": "liability"}
+        )
+    ).json()["changes"]
+    assert (
+        await client.get(
+            f"/rounds/{round2_id}/changes", params={"risk": "true"}
+        )
+    ).json()["changes"]
+
+
 async def test_rounds_listed_for_negotiation(client):
     neg = (
         await client.post(

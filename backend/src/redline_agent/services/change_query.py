@@ -20,6 +20,7 @@ class ChangeFilters:
     materiality: str | None = None
     category: str | None = None
     favored_party: str | None = None
+    risk: bool | None = None
 
 
 class ChangeQueryService:
@@ -50,11 +51,14 @@ def _matches(change: Change, filters: ChangeFilters) -> bool:
         value = change.materiality.value if change.materiality else None
         if value != filters.materiality:
             return False
-    if filters.category is not None and change.category != filters.category:
-        return False
-    if (
-        filters.favored_party is not None
-        and change.favored_party != filters.favored_party
-    ):
+    if filters.category is not None:
+        value = change.category.value if change.category else None
+        if value != filters.category:
+            return False
+    if filters.favored_party is not None:
+        value = change.favored_party.value if change.favored_party else None
+        if value != filters.favored_party:
+            return False
+    if filters.risk is not None and bool(change.risk_flag) != filters.risk:
         return False
     return True

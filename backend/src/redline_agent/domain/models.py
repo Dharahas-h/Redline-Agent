@@ -12,7 +12,9 @@ from datetime import datetime
 
 from redline_agent.domain.enums import (
     AlignMethod,
+    Category,
     ChangeType,
+    FavoredParty,
     Materiality,
     RoundStatus,
 )
@@ -112,8 +114,8 @@ class Change:
     # Interpretation (nullable until interpreted).
     summary: str | None = None
     materiality: Materiality | None = None
-    category: str | None = None
-    favored_party: str | None = None
+    category: Category | None = None
+    favored_party: FavoredParty | None = None
     risk_flag: str | None = None
     interpretation_model: str | None = None
     id: int | None = None

@@ -59,12 +59,26 @@ export async function listRounds(negotiationId: number): Promise<Round[]> {
   return json(await fetch(`${BASE}/negotiations/${negotiationId}/rounds`));
 }
 
+export interface ChangeFeedFilters {
+  materiality?: string;
+  category?: string;
+  favoredParty?: string;
+  risk?: boolean;
+}
+
 export async function getRoundChanges(
   roundId: number,
-  materiality?: string,
+  filters: ChangeFeedFilters = {},
 ): Promise<RoundChanges> {
-  const query = materiality ? `?materiality=${encodeURIComponent(materiality)}` : "";
-  return json(await fetch(`${BASE}/rounds/${roundId}/changes${query}`));
+  const params = new URLSearchParams();
+  if (filters.materiality) params.set("materiality", filters.materiality);
+  if (filters.category) params.set("category", filters.category);
+  if (filters.favoredParty) params.set("favored_party", filters.favoredParty);
+  if (filters.risk) params.set("risk", "true");
+  const query = params.toString();
+  return json(
+    await fetch(`${BASE}/rounds/${roundId}/changes${query ? `?${query}` : ""}`),
+  );
 }
 
 export async function getChange(changeId: number): Promise<Change> {

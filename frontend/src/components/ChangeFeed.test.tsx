@@ -15,8 +15,22 @@ const MATERIAL: Change = {
   raw_after: "Buyer shall pay within 45 days.",
   summary: "Payment window extended from 30 to 45 days.",
   materiality: "substantive",
-  category: null,
-  favored_party: null,
+  category: "payment",
+  favored_party: "counterparty",
+  risk_flag: "For attorney review: payment terms shifted.",
+};
+
+const NEUTRAL_IP: Change = {
+  id: 12,
+  change_type: "added",
+  curr_clause_id: 7,
+  prev_clause_id: null,
+  raw_before: null,
+  raw_after: "License is worldwide.",
+  summary: "IP license scope clarified.",
+  materiality: "substantive",
+  category: "ip",
+  favored_party: "represented",
   risk_flag: null,
 };
 
@@ -40,16 +54,26 @@ const READY_FEED: RoundChanges = {
   changes: [MATERIAL, COSMETIC],
 };
 
-// Honor the materiality filter server-side, as the real API does.
-const server = setupServer(
-  http.get("/rounds/:id/changes", ({ request }) => {
-    const materiality = new URL(request.url).searchParams.get("materiality");
-    const changes = materiality
-      ? READY_FEED.changes.filter((c) => c.materiality === materiality)
-      : READY_FEED.changes;
-    return HttpResponse.json({ ...READY_FEED, changes });
-  }),
-);
+// Honor every filter server-side, as the real API does.
+function feedHandler(changes: Change[]) {
+  return http.get("/rounds/:id/changes", ({ request }) => {
+    const params = new URL(request.url).searchParams;
+    const materiality = params.get("materiality");
+    const category = params.get("category");
+    const favoredParty = params.get("favored_party");
+    const risk = params.get("risk");
+    const filtered = changes.filter(
+      (c) =>
+        (!materiality || c.materiality === materiality) &&
+        (!category || c.category === category) &&
+        (!favoredParty || c.favored_party === favoredParty) &&
+        (risk !== "true" || Boolean(c.risk_flag)),
+    );
+    return HttpResponse.json({ round_id: 2, status: "ready", changes: filtered });
+  });
+}
+
+const server = setupServer(feedHandler(READY_FEED.changes));
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => server.resetHandlers());
@@ -88,6 +112,44 @@ test("can hide cosmetic changes", async () => {
   const cards = screen.getAllByTestId("change-card");
   expect(cards).toHaveLength(1);
   expect(screen.getByTestId("materiality-badge")).toHaveTextContent("Substantive");
+});
+
+test("filters by favored-party, category, and risk", async () => {
+  const user = userEvent.setup();
+  server.use(feedHandler([MATERIAL, COSMETIC, NEUTRAL_IP]));
+  render(<ChangeFeed roundId={2} />);
+
+  expect(await screen.findByTestId("change-feed")).toBeInTheDocument();
+  expect(screen.getAllByTestId("change-card")).toHaveLength(3);
+
+  // Favored-party: only the change favoring the represented party.
+  await user.selectOptions(
+    screen.getByLabelText(/filter by favored party/i),
+    "represented",
+  );
+  await screen.findByText("IP license scope clarified.");
+  expect(screen.getAllByTestId("change-card")).toHaveLength(1);
+  expect(screen.getByTestId("favored-party-badge")).toHaveTextContent("Favors me");
+
+  // Back to all, then narrow by category.
+  await user.selectOptions(
+    screen.getByLabelText(/filter by favored party/i),
+    "",
+  );
+  await user.selectOptions(screen.getByLabelText(/filter by category/i), "payment");
+  await screen.findByText("Payment window extended from 30 to 45 days.");
+  expect(screen.getAllByTestId("change-card")).toHaveLength(1);
+  expect(screen.getByTestId("category-tag")).toHaveTextContent("Payment");
+
+  // Reset category, then show only risk-flagged changes.
+  await user.selectOptions(screen.getByLabelText(/filter by category/i), "");
+  await user.click(screen.getByLabelText(/flagged for review only/i));
+  await screen.findByTestId("risk-flag");
+  const cards = screen.getAllByTestId("change-card");
+  expect(cards).toHaveLength(1);
+  expect(screen.getByTestId("risk-flag")).toHaveTextContent(
+    "For attorney review: payment terms shifted.",
+  );
 });
 
 test("shows an empty state when there are no changes", async () => {

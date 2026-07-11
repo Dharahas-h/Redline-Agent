@@ -8,7 +8,13 @@ interpreted per-change, concurrently, and deduped by content (caching).
 
 import pytest
 
-from redline_agent.domain import Change, ChangeType, Materiality
+from redline_agent.domain import (
+    Category,
+    Change,
+    ChangeType,
+    FavoredParty,
+    Materiality,
+)
 from redline_agent.infra.llm.interpreter import (
     FakeInterpreter,
     Interpretation,
@@ -84,6 +90,51 @@ async def test_identical_changes_are_interpreted_once_cached():
     assert interp.calls == 2
     assert a.summary == b.summary
     assert all(x.materiality is Materiality.SUBSTANTIVE for x in (a, b, c))
+
+
+async def test_material_change_gets_favored_party_category_and_risk():
+    interp = FakeInterpreter(
+        summary="Cap on liability lowered.",
+        materiality=Materiality.SUBSTANTIVE,
+        category=Category.LIABILITY,
+        favored_party=FavoredParty.COUNTERPARTY,
+        risk_flag="For attorney review: the liability cap was reduced.",
+    )
+    change = _change(ChangeType.MODIFIED, "cap is $1M", "cap is $100k")
+
+    await interpret_changes([change], interp, represented_party="Buyer")
+
+    assert change.category is Category.LIABILITY
+    assert change.favored_party is FavoredParty.COUNTERPARTY
+    assert change.risk_flag == "For attorney review: the liability cap was reduced."
+
+
+async def test_represented_party_is_passed_to_the_interpreter():
+    # Favored-party is computed relative to the represented party, so the stage
+    # must thread it into every request.
+    interp = FakeInterpreter(favored_party=FavoredParty.REPRESENTED)
+    change = _change(ChangeType.MODIFIED, "pay within 30 days", "pay within 45 days")
+
+    await interpret_changes([change], interp, represented_party="Acme Corp")
+
+    assert interp.requests[0].represented_party == "Acme Corp"
+
+
+async def test_cosmetic_change_has_no_favored_party_category_or_risk():
+    interp = FakeInterpreter(
+        category=Category.PAYMENT,
+        favored_party=FavoredParty.COUNTERPARTY,
+        risk_flag="should not be applied",
+    )
+    change = _change(ChangeType.MODIFIED, "This Agreement lasts one year.", "this agreement lasts one year")
+
+    await interpret_changes([change], interp, represented_party="Buyer")
+
+    assert change.materiality is Materiality.COSMETIC
+    assert change.category is None
+    assert change.favored_party is None
+    assert change.risk_flag is None
+    assert interp.calls == 0
 
 
 async def test_stage_never_adds_or_drops_changes():

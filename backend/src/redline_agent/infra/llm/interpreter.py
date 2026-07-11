@@ -16,28 +16,38 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from redline_agent.domain import ChangeType, Materiality
+from redline_agent.domain import Category, ChangeType, FavoredParty, Materiality
 
 
 @dataclass
 class InterpretationRequest:
-    """The deterministic evidence handed to the interpreter for one change."""
+    """The deterministic evidence handed to the interpreter for one change.
+
+    ``represented_party`` is the side the user acts for; favored-party is judged
+    relative to it, so it is threaded into every request.
+    """
 
     change_type: ChangeType
     raw_before: str | None
     raw_after: str | None
+    represented_party: str
 
 
 @dataclass
 class Interpretation:
     """The structured annotation produced for one change.
 
-    This slice populates a plain-English ``summary`` and a ``materiality`` tag;
-    favored-party, category, and risk arrive in a later slice.
+    ``summary`` and ``materiality`` are always set. ``category``,
+    ``favored_party``, and ``risk_flag`` are the deeper annotation; ``risk_flag``
+    is a plain-English attorney-review prompt (``None`` when nothing is flagged),
+    never a legal conclusion.
     """
 
     summary: str
     materiality: Materiality
+    category: Category | None = None
+    favored_party: FavoredParty | None = None
+    risk_flag: str | None = None
 
 
 class LLMInterpreter(Protocol):
@@ -73,11 +83,18 @@ class FakeInterpreter:
         summary: str | None = None,
         materiality: Materiality = Materiality.SUBSTANTIVE,
         model_name: str = "fake",
+        category: Category | None = None,
+        favored_party: FavoredParty | None = None,
+        risk_flag: str | None = None,
     ) -> None:
         self._summary = summary
         self._materiality = materiality
         self._model_name = model_name
+        self._category = category
+        self._favored_party = favored_party
+        self._risk_flag = risk_flag
         self.calls = 0
+        self.requests: list[InterpretationRequest] = []
 
     @property
     def model_name(self) -> str:
@@ -85,7 +102,11 @@ class FakeInterpreter:
 
     async def interpret(self, request: InterpretationRequest) -> Interpretation:
         self.calls += 1
+        self.requests.append(request)
         return Interpretation(
             summary=self._summary or _default_summary(request),
             materiality=self._materiality,
+            category=self._category,
+            favored_party=self._favored_party,
+            risk_flag=self._risk_flag,
         )

@@ -11,6 +11,23 @@ const MATERIALITY_LABELS: Record<string, string> = {
   cosmetic: "Cosmetic",
 };
 
+// Favored-party is stored relative to the represented party, so the badge maps
+// straight to the user's point of view.
+const FAVORED_PARTY_LABELS: Record<string, string> = {
+  represented: "Favors me",
+  counterparty: "Favors them",
+  neutral: "Neutral",
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+  payment: "Payment",
+  liability: "Liability",
+  ip: "IP",
+  termination: "Termination",
+  confidentiality: "Confidentiality",
+  other: "Other",
+};
+
 export function ChangeCard({ change }: { change: Change }) {
   return (
     <article className="change-card" data-testid="change-card">
@@ -26,7 +43,28 @@ export function ChangeCard({ change }: { change: Change }) {
             {MATERIALITY_LABELS[change.materiality] ?? change.materiality}
           </span>
         )}
+        {change.favored_party && (
+          <span
+            className={`favored-party-badge ${change.favored_party}`}
+            data-testid="favored-party-badge"
+          >
+            {FAVORED_PARTY_LABELS[change.favored_party] ?? change.favored_party}
+          </span>
+        )}
+        {change.category && (
+          <span
+            className={`category-tag ${change.category}`}
+            data-testid="category-tag"
+          >
+            {CATEGORY_LABELS[change.category] ?? change.category}
+          </span>
+        )}
       </header>
+      {change.risk_flag && (
+        <p className="risk-flag" data-testid="risk-flag" role="note">
+          ⚠ {change.risk_flag}
+        </p>
+      )}
       {change.summary && (
         <div className="summary" data-testid="summary" data-machine-generated="true">
           <p>{change.summary}</p>

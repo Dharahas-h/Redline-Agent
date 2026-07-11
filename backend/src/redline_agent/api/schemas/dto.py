@@ -98,7 +98,7 @@ class ChangeOut(BaseModel):
             raw_after=c.raw_after,
             summary=c.summary,
             materiality=c.materiality.value if c.materiality else None,
-            category=c.category,
-            favored_party=c.favored_party,
+            category=c.category.value if c.category else None,
+            favored_party=c.favored_party.value if c.favored_party else None,
             risk_flag=c.risk_flag,
         )

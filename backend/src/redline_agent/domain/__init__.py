@@ -2,7 +2,9 @@
 
 from redline_agent.domain.enums import (
     AlignMethod,
+    Category,
     ChangeType,
+    FavoredParty,
     Materiality,
     RoundStatus,
 )
@@ -17,7 +19,9 @@ from redline_agent.domain.models import (
 
 __all__ = [
     "AlignMethod",
+    "Category",
     "ChangeType",
+    "FavoredParty",
     "Materiality",
     "RoundStatus",
     "Change",

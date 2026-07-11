@@ -24,6 +24,7 @@ async def round_changes(
     materiality: str | None = None,
     category: str | None = None,
     favored_party: str | None = None,
+    risk: bool | None = None,
     feed: ChangeQueryService = Depends(get_change_query_service),
     tenant_id: str = Depends(get_tenant_id),
 ):
@@ -31,7 +32,10 @@ async def round_changes(
     if round_ is None:
         raise HTTPException(status_code=404, detail="Round not found")
     filters = ChangeFilters(
-        materiality=materiality, category=category, favored_party=favored_party
+        materiality=materiality,
+        category=category,
+        favored_party=favored_party,
+        risk=risk,
     )
     changes = await feed.feed(round_id, tenant_id, filters)
     return RoundChangesOut(

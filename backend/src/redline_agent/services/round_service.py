@@ -31,6 +31,7 @@ from redline_agent.repositories.repos import (
     ChangeRepository,
     ClauseLineageRepository,
     ClauseRepository,
+    NegotiationRepository,
     RoundRepository,
 )
 
@@ -136,6 +137,11 @@ class RoundService:
                     )
                 )
 
+            negotiation = await NegotiationRepository(session).get(
+                round_.negotiation_id, tenant_id
+            )
+            represented_party = negotiation.represented_party if negotiation else ""
+
             diffs = diff_pairs(pairs)
             changes = [
                 Change(
@@ -154,7 +160,9 @@ class RoundService:
             if changes:
                 # Interpretation annotates the changes; it never alters the set
                 # the deterministic differ produced (decision #1).
-                await interpret_changes(changes, self._interpreter)
+                await interpret_changes(
+                    changes, self._interpreter, represented_party
+                )
                 await changes_repo.create_many(changes)
 
         await rounds.set_status(round_.id, RoundStatus.READY)

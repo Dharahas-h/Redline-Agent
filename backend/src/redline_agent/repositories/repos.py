@@ -14,11 +14,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from redline_agent.domain import (
     AlignMethod,
+    Category,
     Change,
     ChangeType,
     Clause,
     ClauseLineage,
     Export,
+    FavoredParty,
     Materiality,
     Negotiation,
     Round,
@@ -85,8 +87,10 @@ def _to_change(row: ChangeRow) -> Change:
         raw_after=row.raw_after,
         summary=row.summary,
         materiality=Materiality(row.materiality) if row.materiality else None,
-        category=row.category,
-        favored_party=row.favored_party,
+        category=Category(row.category) if row.category else None,
+        favored_party=(
+            FavoredParty(row.favored_party) if row.favored_party else None
+        ),
         risk_flag=row.risk_flag,
         interpretation_model=row.interpretation_model,
     )
@@ -291,8 +295,8 @@ class ChangeRepository:
                 raw_after=c.raw_after,
                 summary=c.summary,
                 materiality=c.materiality.value if c.materiality else None,
-                category=c.category,
-                favored_party=c.favored_party,
+                category=c.category.value if c.category else None,
+                favored_party=c.favored_party.value if c.favored_party else None,
                 risk_flag=c.risk_flag,
                 interpretation_model=c.interpretation_model,
             )

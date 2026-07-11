@@ -3,10 +3,28 @@ import { getRoundChanges } from "../api/client";
 import type { RoundChanges } from "../types";
 import { ChangeCard } from "./ChangeCard";
 
+const CATEGORY_OPTIONS = [
+  ["payment", "Payment"],
+  ["liability", "Liability"],
+  ["ip", "IP"],
+  ["termination", "Termination"],
+  ["confidentiality", "Confidentiality"],
+  ["other", "Other"],
+] as const;
+
+const FAVORED_PARTY_OPTIONS = [
+  ["represented", "Favors me"],
+  ["counterparty", "Favors them"],
+  ["neutral", "Neutral"],
+] as const;
+
 export function ChangeFeed({ roundId }: { roundId: number }) {
   const [data, setData] = useState<RoundChanges | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hideCosmetic, setHideCosmetic] = useState(false);
+  const [category, setCategory] = useState("");
+  const [favoredParty, setFavoredParty] = useState("");
+  const [riskOnly, setRiskOnly] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -14,11 +32,16 @@ export function ChangeFeed({ roundId }: { roundId: number }) {
     setData(null);
     setError(null);
 
-    // Server-side materiality filter: hide cosmetic == substantive-only.
-    const materiality = hideCosmetic ? "substantive" : undefined;
+    // Server-side filters: hide cosmetic == substantive-only.
+    const filters = {
+      materiality: hideCosmetic ? "substantive" : undefined,
+      category: category || undefined,
+      favoredParty: favoredParty || undefined,
+      risk: riskOnly || undefined,
+    };
 
     const poll = () => {
-      getRoundChanges(roundId, materiality)
+      getRoundChanges(roundId, filters)
         .then((d) => {
           if (!active) return;
           setData(d);
@@ -35,7 +58,7 @@ export function ChangeFeed({ roundId }: { roundId: number }) {
       active = false;
       clearTimeout(timer);
     };
-  }, [roundId, hideCosmetic]);
+  }, [roundId, hideCosmetic, category, favoredParty, riskOnly]);
 
   if (error) return <p role="alert">Failed to load changes: {error}</p>;
   if (!data) return <p>Loading changes…</p>;
@@ -52,6 +75,44 @@ export function ChangeFeed({ roundId }: { roundId: number }) {
             onChange={(e) => setHideCosmetic(e.target.checked)}
           />
           Hide cosmetic changes
+        </label>
+        <label>
+          Category
+          <select
+            aria-label="Filter by category"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+          >
+            <option value="">All categories</option>
+            {CATEGORY_OPTIONS.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Favored party
+          <select
+            aria-label="Filter by favored party"
+            value={favoredParty}
+            onChange={(e) => setFavoredParty(e.target.value)}
+          >
+            <option value="">Either side</option>
+            {FAVORED_PARTY_OPTIONS.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={riskOnly}
+            onChange={(e) => setRiskOnly(e.target.checked)}
+          />
+          Flagged for review only
         </label>
       </div>
       {data.changes.length === 0 ? (

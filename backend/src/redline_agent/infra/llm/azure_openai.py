@@ -14,25 +14,36 @@ from __future__ import annotations
 
 import json
 
-from redline_agent.domain import Materiality
+from redline_agent.domain import Category, FavoredParty, Materiality
 from redline_agent.infra.llm.interpreter import (
     Interpretation,
     InterpretationRequest,
 )
 
+_CATEGORIES = ", ".join(c.value for c in Category)
+
 _SYSTEM_PROMPT = (
     "You are a contract-analysis assistant producing attorney work-product for "
     "review. You are given the exact before/after text of one clause-level "
-    "change that a deterministic diff already detected. Explain only what this "
-    "change means; never assert legal conclusions. Respond with a JSON object "
-    'with keys "summary" (a one- or two-sentence plain-English description of '
-    'what changed) and "materiality" (either "substantive" or "cosmetic", where '
-    '"cosmetic" means formatting/wording with no change in meaning or effect).'
+    "change that a deterministic diff already detected, and the name of the "
+    "party the user represents. Explain only what this change means; never "
+    "assert legal conclusions. Respond with a JSON object with keys:\n"
+    '- "summary": a one- or two-sentence plain-English description of what '
+    "changed.\n"
+    '- "materiality": "substantive" or "cosmetic" ("cosmetic" means '
+    "formatting/wording with no change in meaning or effect).\n"
+    f'- "category": one of {_CATEGORIES} (use "other" if none fit).\n'
+    '- "favored_party": "represented" if the change benefits the represented '
+    'party, "counterparty" if it benefits the other side, or "neutral".\n'
+    '- "risk_flag": if the change is unusual or aggressive, a short sentence '
+    "prompting the attorney to review it (framed as a review prompt, never a "
+    'conclusion); otherwise null.'
 )
 
 
 def _user_prompt(request: InterpretationRequest) -> str:
     return (
+        f"Represented party: {request.represented_party or '(unspecified)'}\n"
         f"Change type: {request.change_type.value}\n"
         f"Before:\n{request.raw_before or '(none)'}\n\n"
         f"After:\n{request.raw_after or '(none)'}"
@@ -83,7 +94,13 @@ class AzureOpenAIInterpreter:
             ],
         )
         data = json.loads(response.choices[0].message.content or "{}")
+        category = data.get("category")
+        favored_party = data.get("favored_party")
+        risk_flag = data.get("risk_flag")
         return Interpretation(
             summary=data["summary"],
             materiality=Materiality(data["materiality"]),
+            category=Category(category) if category else None,
+            favored_party=FavoredParty(favored_party) if favored_party else None,
+            risk_flag=risk_flag or None,
         )

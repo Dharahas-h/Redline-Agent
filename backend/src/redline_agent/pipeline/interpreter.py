@@ -47,11 +47,16 @@ def _is_cosmetic(change: Change) -> bool:
 
 
 async def interpret_changes(
-    changes: list[Change], interpreter: LLMInterpreter
+    changes: list[Change],
+    interpreter: LLMInterpreter,
+    represented_party: str = "",
 ) -> None:
-    """Fill ``summary``/``materiality`` on each change in place.
+    """Fill interpretation fields on each material change in place.
 
-    Never mutates the membership of ``changes`` — only their annotation fields.
+    Sets ``summary``/``materiality`` and — for material changes — ``category``,
+    ``favored_party`` (relative to ``represented_party``), and ``risk_flag``.
+    Never mutates the membership of ``changes`` — only their annotation fields
+    (decision #1).
     """
     material: list[Change] = []
     for change in changes:
@@ -74,6 +79,7 @@ async def interpret_changes(
                 change_type=change_type,
                 raw_before=raw_before,
                 raw_after=raw_after,
+                represented_party=represented_party,
             )
         )
         return key, interpretation
@@ -84,4 +90,7 @@ async def interpret_changes(
         for change in by_content[key]:
             change.summary = interpretation.summary
             change.materiality = interpretation.materiality
+            change.category = interpretation.category
+            change.favored_party = interpretation.favored_party
+            change.risk_flag = interpretation.risk_flag
             change.interpretation_model = interpreter.model_name
