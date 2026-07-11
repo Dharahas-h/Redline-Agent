@@ -18,6 +18,11 @@ const MATERIAL: Change = {
   category: "payment",
   favored_party: "counterparty",
   risk_flag: "For attorney review: payment terms shifted.",
+  alignment_confidence: 0.9,
+  alignment_method: "embedding",
+  alignment_similarity: 0.9,
+  low_confidence: false,
+  overridden: false,
 };
 
 const NEUTRAL_IP: Change = {
@@ -32,6 +37,11 @@ const NEUTRAL_IP: Change = {
   category: "ip",
   favored_party: "represented",
   risk_flag: null,
+  alignment_confidence: 0.9,
+  alignment_method: "embedding",
+  alignment_similarity: 0.9,
+  low_confidence: false,
+  overridden: false,
 };
 
 const COSMETIC: Change = {
@@ -46,6 +56,11 @@ const COSMETIC: Change = {
   category: null,
   favored_party: null,
   risk_flag: null,
+  alignment_confidence: 1.0,
+  alignment_method: "heading",
+  alignment_similarity: 1.0,
+  low_confidence: false,
+  overridden: false,
 };
 
 const READY_FEED: RoundChanges = {

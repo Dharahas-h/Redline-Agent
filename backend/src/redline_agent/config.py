@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     azure_openai_api_key: str | None = None
     azure_openai_endpoint: str | None = None
     azure_openai_deployment: str | None = None
+    # Embeddings for clause alignment (decision #7). When set, the Azure embedder
+    # is used; otherwise the deterministic offline fake stands in.
+    azure_openai_embedding_deployment: str | None = None
     azure_openai_api_version: str = "2024-06-01"
 
 

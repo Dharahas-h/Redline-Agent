@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from redline_agent.infra.blob_store import InMemoryBlobStore
+from redline_agent.infra.embedder import FakeEmbedder
+from redline_agent.infra.llm.adjudicator import FakeAdjudicator
 from redline_agent.infra.llm.interpreter import FakeInterpreter
 from redline_agent.repositories.orm import Base
 
@@ -46,3 +48,15 @@ def blob_store():
 def interpreter():
     """A deterministic, offline interpreter for orchestration tests."""
     return FakeInterpreter(summary="Machine-generated summary.")
+
+
+@pytest_asyncio.fixture
+def embedder():
+    """A deterministic, offline embedder for alignment tests."""
+    return FakeEmbedder()
+
+
+@pytest_asyncio.fixture
+def adjudicator():
+    """A deterministic, offline alignment adjudicator for ambiguous cases."""
+    return FakeAdjudicator()

@@ -15,7 +15,22 @@ const BASE: Change = {
   category: "liability",
   favored_party: "counterparty",
   risk_flag: "For attorney review: the liability cap was reduced tenfold.",
+  alignment_confidence: 1.0,
+  alignment_method: "heading",
+  alignment_similarity: 1.0,
+  low_confidence: false,
+  overridden: false,
 };
+
+test("flags a low-confidence match for review", () => {
+  render(<ChangeCard change={{ ...BASE, low_confidence: true }} />);
+  expect(screen.getByTestId("low-confidence-badge")).toBeInTheDocument();
+});
+
+test("shows a corrected-match badge for an overridden alignment", () => {
+  render(<ChangeCard change={{ ...BASE, overridden: true }} />);
+  expect(screen.getByTestId("overridden-badge")).toBeInTheDocument();
+});
 
 test("shows favored-party badge, category tag, and risk-flag prompt", () => {
   render(<ChangeCard change={BASE} />);

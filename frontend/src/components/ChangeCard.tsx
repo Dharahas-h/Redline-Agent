@@ -1,4 +1,6 @@
 import type { Change } from "../types";
+import { AlignmentOverride } from "./AlignmentOverride";
+import type { AlignmentCandidate } from "./AlignmentOverride";
 
 const LABELS: Record<string, string> = {
   added: "Added",
@@ -28,13 +30,35 @@ const CATEGORY_LABELS: Record<string, string> = {
   other: "Other",
 };
 
-export function ChangeCard({ change }: { change: Change }) {
+export function ChangeCard({
+  change,
+  candidates,
+  onOverride,
+}: {
+  change: Change;
+  candidates?: AlignmentCandidate[];
+  onOverride?: (currClauseId: number, prevClauseId: number | null) => void;
+}) {
   return (
     <article className="change-card" data-testid="change-card">
       <header>
         <span className="change-type" data-testid="change-type">
           {LABELS[change.change_type] ?? change.change_type}
         </span>
+        {change.low_confidence && (
+          <span
+            className="low-confidence-badge"
+            data-testid="low-confidence-badge"
+            role="note"
+          >
+            Uncertain match — please review
+          </span>
+        )}
+        {change.overridden && (
+          <span className="overridden-badge" data-testid="overridden-badge">
+            Match corrected
+          </span>
+        )}
         {change.materiality && (
           <span
             className={`materiality-badge ${change.materiality}`}
@@ -84,6 +108,13 @@ export function ChangeCard({ change }: { change: Change }) {
           <h4>After</h4>
           <pre data-testid="raw-after">{change.raw_after}</pre>
         </div>
+      )}
+      {onOverride && change.curr_clause_id !== null && (
+        <AlignmentOverride
+          change={change}
+          candidates={candidates ?? []}
+          onOverride={onOverride}
+        />
       )}
     </article>
   );

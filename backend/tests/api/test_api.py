@@ -235,3 +235,94 @@ async def test_rounds_listed_for_negotiation(client):
 
 async def test_feed_missing_round_returns_404(client):
     assert (await client.get("/rounds/999/changes")).status_code == 404
+
+
+# Unlabeled clauses with differing headings -> alignment is embedding-only and
+# ambiguous, so the match is flagged low-confidence.
+AMBIG_1 = make_docx(
+    [
+        "ALPHA ONE",
+        "the party shall protect confidential information",
+        "ALPHA TWO",
+        "the party shall protect data and records",
+    ]
+)
+AMBIG_2 = make_docx(
+    [
+        "BETA ONE",
+        "the party shall protect confidential information and data and records",
+    ]
+)
+
+
+async def test_feed_flags_low_confidence_matches(client):
+    neg = (
+        await client.post(
+            "/negotiations", json={"title": "M", "represented_party": "Buyer"}
+        )
+    ).json()
+    await _upload(client, neg["id"], "Buyer", AMBIG_1)
+    r2 = await _upload(client, neg["id"], "Seller", AMBIG_2)
+    round2_id = r2.json()["id"]
+
+    payload = (await client.get(f"/rounds/{round2_id}/changes")).json()
+    flagged = [c for c in payload["changes"] if c["low_confidence"]]
+    assert flagged, "an uncertain embedding match should be flagged"
+    assert flagged[0]["alignment_method"] == "embedding"
+    assert flagged[0]["overridden"] is False
+
+
+async def test_patch_alignment_override_regenerates_feed(client):
+    neg = (
+        await client.post(
+            "/negotiations", json={"title": "M", "represented_party": "Buyer"}
+        )
+    ).json()
+    await _upload(client, neg["id"], "Buyer", ROUND_1)
+    r2 = await _upload(client, neg["id"], "Seller", ROUND_2)
+    round2_id = r2.json()["id"]
+
+    feed = (await client.get(f"/rounds/{round2_id}/changes")).json()
+    modified = next(c for c in feed["changes"] if c["change_type"] == "modified")
+
+    resp = await client.patch(
+        f"/rounds/{round2_id}/alignment",
+        json={
+            "links": [
+                {"curr_clause_id": modified["curr_clause_id"], "prev_clause_id": None}
+            ]
+        },
+    )
+    assert resp.status_code == 200
+    types = sorted(c["change_type"] for c in resp.json()["changes"])
+    assert types == ["added", "removed"]
+
+    # The regenerated match is marked as a human override.
+    refetched = (await client.get(f"/rounds/{round2_id}/changes")).json()
+    added = next(c for c in refetched["changes"] if c["change_type"] == "added")
+    assert added["overridden"] is True
+    assert added["alignment_method"] == "override"
+
+
+async def test_patch_alignment_unknown_round_returns_404(client):
+    resp = await client.patch(
+        "/rounds/999/alignment", json={"links": []}
+    )
+    assert resp.status_code == 404
+
+
+async def test_patch_alignment_rejects_foreign_clause(client):
+    neg = (
+        await client.post(
+            "/negotiations", json={"title": "M", "represented_party": "Buyer"}
+        )
+    ).json()
+    await _upload(client, neg["id"], "Buyer", ROUND_1)
+    r2 = await _upload(client, neg["id"], "Seller", ROUND_2)
+    round2_id = r2.json()["id"]
+
+    resp = await client.patch(
+        f"/rounds/{round2_id}/alignment",
+        json={"links": [{"curr_clause_id": 999999, "prev_clause_id": None}]},
+    )
+    assert resp.status_code == 400

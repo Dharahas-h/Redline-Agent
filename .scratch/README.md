@@ -6,6 +6,7 @@ eligible issues.
 | Priority | Feature slug  | Status          | PRD                  |
 | -------- | ------------- | --------------- | -------------------- |
 | 1        | redline-agent | ready-for-agent | redline-agent/PRD.md |
+| 2        | enhancements  | ready-for-agent | enhancements/PRD.md  |
 
 ## Status vocabulary
 

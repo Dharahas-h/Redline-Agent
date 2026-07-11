@@ -219,6 +219,20 @@ class ClauseRepository:
         return _to_clause(row)
 
 
+def _to_lineage(row: ClauseLineageRow) -> ClauseLineage:
+    return ClauseLineage(
+        id=row.id,
+        tenant_id=row.tenant_id,
+        negotiation_id=row.negotiation_id,
+        prev_clause_id=row.prev_clause_id,
+        curr_clause_id=row.curr_clause_id,
+        similarity=row.similarity,
+        confidence=row.confidence,
+        align_method=AlignMethod(row.align_method),
+        overridden=row.overridden,
+    )
+
+
 class ClauseLineageRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -237,6 +251,43 @@ class ClauseLineageRepository:
         self._session.add(row)
         await self._session.flush()
         lineage.id = row.id
+        return lineage
+
+    async def get_by_curr_clause(
+        self, curr_clause_id: int, tenant_id: str
+    ) -> ClauseLineage | None:
+        stmt = select(ClauseLineageRow).where(
+            ClauseLineageRow.curr_clause_id == curr_clause_id,
+            ClauseLineageRow.tenant_id == tenant_id,
+        )
+        row = (await self._session.scalars(stmt)).first()
+        return _to_lineage(row) if row is not None else None
+
+    async def list_for_round(
+        self, round_id: int, tenant_id: str
+    ) -> list[ClauseLineage]:
+        """Lineage links whose current clause belongs to ``round_id``."""
+        stmt = (
+            select(ClauseLineageRow)
+            .join(ClauseRow, ClauseLineageRow.curr_clause_id == ClauseRow.id)
+            .where(
+                ClauseRow.round_id == round_id,
+                ClauseLineageRow.tenant_id == tenant_id,
+            )
+            .order_by(ClauseRow.ordinal)
+        )
+        rows = (await self._session.scalars(stmt)).all()
+        return [_to_lineage(r) for r in rows]
+
+    async def update(self, lineage: ClauseLineage) -> ClauseLineage:
+        row = await self._session.get(ClauseLineageRow, lineage.id)
+        if row is not None and row.tenant_id == lineage.tenant_id:
+            row.prev_clause_id = lineage.prev_clause_id
+            row.similarity = lineage.similarity
+            row.confidence = lineage.confidence
+            row.align_method = lineage.align_method.value
+            row.overridden = lineage.overridden
+            await self._session.flush()
         return lineage
 
 
@@ -323,3 +374,13 @@ class ChangeRepository:
         if row is None or row.tenant_id != tenant_id:
             return None
         return _to_change(row)
+
+    async def delete_for_round(self, to_round_id: int, tenant_id: str) -> None:
+        """Drop this round's changes so they can be regenerated from scratch."""
+        stmt = select(ChangeRow).where(
+            ChangeRow.to_round_id == to_round_id,
+            ChangeRow.tenant_id == tenant_id,
+        )
+        for row in (await self._session.scalars(stmt)).all():
+            await self._session.delete(row)
+        await self._session.flush()

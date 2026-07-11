@@ -28,6 +28,8 @@ def get_round_service(request: Request) -> RoundService:
         request.app.state.session_factory,
         request.app.state.blob_store,
         request.app.state.interpreter,
+        request.app.state.embedder,
+        request.app.state.adjudicator,
     )
 
 

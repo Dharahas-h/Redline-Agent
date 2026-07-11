@@ -34,6 +34,12 @@ export interface Change {
   category: string | null;
   favored_party: string | null;
   risk_flag: string | null;
+  // Alignment provenance for this clause's match (clause lineage).
+  alignment_confidence: number | null;
+  alignment_method: string | null;
+  alignment_similarity: number | null;
+  low_confidence: boolean;
+  overridden: boolean;
 }
 
 export interface RoundChanges {

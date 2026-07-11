@@ -5,15 +5,24 @@ canonical text synchronously, then the round is created with ``pending`` status.
 The pipeline (segment -> align -> diff -> persist) runs as a background task,
 transitioning the round to ``processing`` then ``ready`` (or ``failed``).
 
+Alignment uses the embedding + structural aligner with LLM adjudication for
+ambiguous cases (Slice 5); when no ``Embedder`` is injected it falls back to
+Slice 1's positional alignment. A human can override the automatic pairing via
+``override_alignment``, which regenerates the diff and interpretation for the
+round (decision #5, the human-in-the-loop trust model).
+
 This is the highest-value orchestration seam: with fakes injected and a real
 DB, a fixture .docx drives the whole spine.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from redline_agent.domain import (
+    AlignMethod,
     Change,
     Clause,
     ClauseLineage,
@@ -21,8 +30,10 @@ from redline_agent.domain import (
     RoundStatus,
 )
 from redline_agent.infra.blob_store import BlobStore
+from redline_agent.infra.embedder import Embedder
+from redline_agent.infra.llm.adjudicator import AlignmentAdjudicator
 from redline_agent.infra.llm.interpreter import LLMInterpreter
-from redline_agent.pipeline.aligner import align_positional
+from redline_agent.pipeline.aligner import AlignmentPair, align, align_positional
 from redline_agent.pipeline.differ import diff_pairs
 from redline_agent.pipeline.flatten import flatten_docx
 from redline_agent.pipeline.interpreter import interpret_changes
@@ -36,16 +47,33 @@ from redline_agent.repositories.repos import (
 )
 
 
+@dataclass
+class AlignmentLink:
+    """A single human-supplied clause pairing for an override.
+
+    ``prev_clause_id`` of ``None`` marks the current clause as new (added).
+    Re-pair is one link; a merge points several current clauses at the same
+    prior clause; a split leaves the extra current clauses as additions.
+    """
+
+    curr_clause_id: int
+    prev_clause_id: int | None = None
+
+
 class RoundService:
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
         blob_store: BlobStore,
         interpreter: LLMInterpreter,
+        embedder: Embedder | None = None,
+        adjudicator: AlignmentAdjudicator | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._blob_store = blob_store
         self._interpreter = interpreter
+        self._embedder = embedder
+        self._adjudicator = adjudicator
 
     async def create_round(
         self,
@@ -87,13 +115,19 @@ class RoundService:
             await self._mark_failed(round_id)
             raise
 
+    async def _align(
+        self, prev: list[Clause], curr: list[Clause]
+    ) -> list[AlignmentPair]:
+        if self._embedder is None:
+            return align_positional(prev, curr)
+        return await align(prev, curr, self._embedder, self._adjudicator)
+
     async def _run_pipeline(
         self, session: AsyncSession, round_id: int, tenant_id: str
     ) -> None:
         rounds = RoundRepository(session)
         clauses_repo = ClauseRepository(session)
         lineage_repo = ClauseLineageRepository(session)
-        changes_repo = ChangeRepository(session)
 
         round_ = await rounds.get(round_id, tenant_id)
         if round_ is None or round_.id is None:
@@ -120,7 +154,7 @@ class RoundService:
         )
         if prior is not None and prior.id is not None:
             prev_clauses = await clauses_repo.list_for_round(prior.id, tenant_id)
-            pairs = align_positional(prev_clauses, curr_clauses)
+            pairs = await self._align(prev_clauses, curr_clauses)
 
             for pair in pairs:
                 if pair.curr is None or pair.curr.id is None:
@@ -137,35 +171,164 @@ class RoundService:
                     )
                 )
 
-            negotiation = await NegotiationRepository(session).get(
-                round_.negotiation_id, tenant_id
-            )
-            represented_party = negotiation.represented_party if negotiation else ""
-
-            diffs = diff_pairs(pairs)
-            changes = [
-                Change(
-                    negotiation_id=round_.negotiation_id,
-                    from_round_id=prior.id,
-                    to_round_id=round_.id,
-                    change_type=d.change_type,
-                    tenant_id=tenant_id,
-                    curr_clause_id=d.curr_clause.id if d.curr_clause else None,
-                    prev_clause_id=d.prev_clause.id if d.prev_clause else None,
-                    raw_before=d.raw_before,
-                    raw_after=d.raw_after,
-                )
-                for d in diffs
-            ]
-            if changes:
-                # Interpretation annotates the changes; it never alters the set
-                # the deterministic differ produced (decision #1).
-                await interpret_changes(
-                    changes, self._interpreter, represented_party
-                )
-                await changes_repo.create_many(changes)
+            await self._regenerate_changes(session, round_, prior, pairs, tenant_id)
 
         await rounds.set_status(round_.id, RoundStatus.READY)
+
+    async def _regenerate_changes(
+        self,
+        session: AsyncSession,
+        round_: Round,
+        prior: Round,
+        pairs: list[AlignmentPair],
+        tenant_id: str,
+    ) -> None:
+        """Diff the pairs, interpret material changes, and persist them.
+
+        The deterministic differ is the sole authority on which changes exist;
+        interpretation only annotates them (decision #1). Existing changes for
+        the round are cleared first so this is idempotent and safe to re-run on
+        an override.
+        """
+        changes_repo = ChangeRepository(session)
+        await changes_repo.delete_for_round(round_.id, tenant_id)
+
+        negotiation = await NegotiationRepository(session).get(
+            round_.negotiation_id, tenant_id
+        )
+        represented_party = negotiation.represented_party if negotiation else ""
+
+        diffs = diff_pairs(pairs)
+        changes = [
+            Change(
+                negotiation_id=round_.negotiation_id,
+                from_round_id=prior.id,
+                to_round_id=round_.id,
+                change_type=d.change_type,
+                tenant_id=tenant_id,
+                curr_clause_id=d.curr_clause.id if d.curr_clause else None,
+                prev_clause_id=d.prev_clause.id if d.prev_clause else None,
+                raw_before=d.raw_before,
+                raw_after=d.raw_after,
+            )
+            for d in diffs
+        ]
+        if changes:
+            await interpret_changes(changes, self._interpreter, represented_party)
+            await changes_repo.create_many(changes)
+
+    async def override_alignment(
+        self, round_id: int, tenant_id: str, links: list[AlignmentLink]
+    ) -> Round | None:
+        """Apply human alignment corrections and regenerate the round's diff.
+
+        Each link re-pairs a current clause to a prior clause (or to nothing).
+        Affected lineage links are marked ``overridden`` with method ``override``
+        and full confidence; the diff and interpretation are then rebuilt from
+        the corrected lineage. Returns ``None`` if the round is unknown, or
+        raises ``ValueError`` if a link references clauses outside this round.
+        """
+        async with self._session_factory() as session:
+            rounds = RoundRepository(session)
+            clauses_repo = ClauseRepository(session)
+            lineage_repo = ClauseLineageRepository(session)
+
+            round_ = await rounds.get(round_id, tenant_id)
+            if round_ is None or round_.id is None:
+                return None
+            prior = await rounds.prior_round(
+                round_.negotiation_id, round_.round_no, tenant_id
+            )
+            if prior is None or prior.id is None:
+                # No prior round -> nothing to align; the override is a no-op.
+                return round_
+
+            curr_clauses = await clauses_repo.list_for_round(round_.id, tenant_id)
+            prev_clauses = await clauses_repo.list_for_round(prior.id, tenant_id)
+            curr_ids = {c.id for c in curr_clauses}
+            prev_ids = {c.id for c in prev_clauses}
+
+            for link in links:
+                if link.curr_clause_id not in curr_ids:
+                    raise ValueError(
+                        f"Clause {link.curr_clause_id} is not in this round"
+                    )
+                if (
+                    link.prev_clause_id is not None
+                    and link.prev_clause_id not in prev_ids
+                ):
+                    raise ValueError(
+                        f"Clause {link.prev_clause_id} is not in the prior round"
+                    )
+                existing = await lineage_repo.get_by_curr_clause(
+                    link.curr_clause_id, tenant_id
+                )
+                if existing is None:
+                    await lineage_repo.create(
+                        ClauseLineage(
+                            negotiation_id=round_.negotiation_id,
+                            curr_clause_id=link.curr_clause_id,
+                            prev_clause_id=link.prev_clause_id,
+                            tenant_id=tenant_id,
+                            similarity=None,
+                            confidence=1.0,
+                            align_method=AlignMethod.OVERRIDE,
+                            overridden=True,
+                        )
+                    )
+                else:
+                    existing.prev_clause_id = link.prev_clause_id
+                    existing.similarity = None
+                    existing.confidence = 1.0
+                    existing.align_method = AlignMethod.OVERRIDE
+                    existing.overridden = True
+                    await lineage_repo.update(existing)
+
+            pairs = await self._pairs_from_lineage(
+                session, round_.id, tenant_id, prev_clauses, curr_clauses
+            )
+            await self._regenerate_changes(session, round_, prior, pairs, tenant_id)
+            await session.commit()
+            return round_
+
+    async def _pairs_from_lineage(
+        self,
+        session: AsyncSession,
+        round_id: int,
+        tenant_id: str,
+        prev_clauses: list[Clause],
+        curr_clauses: list[Clause],
+    ) -> list[AlignmentPair]:
+        """Rebuild alignment pairs from the round's persisted lineage links."""
+        lineage_repo = ClauseLineageRepository(session)
+        lineage = await lineage_repo.list_for_round(round_id, tenant_id)
+        by_curr = {link.curr_clause_id: link for link in lineage}
+        prev_by_id = {c.id: c for c in prev_clauses}
+
+        used_prev: set[int] = set()
+        pairs: list[AlignmentPair] = []
+        for c in curr_clauses:
+            link = by_curr.get(c.id)
+            prev = (
+                prev_by_id.get(link.prev_clause_id)
+                if link and link.prev_clause_id is not None
+                else None
+            )
+            if prev is not None:
+                used_prev.add(prev.id)
+            pairs.append(
+                AlignmentPair(
+                    prev=prev,
+                    curr=c,
+                    align_method=link.align_method if link else AlignMethod.POSITIONAL,
+                    similarity=link.similarity if link else None,
+                    confidence=link.confidence if link else 1.0,
+                )
+            )
+        for c in prev_clauses:
+            if c.id not in used_prev:
+                pairs.append(AlignmentPair(prev=c, curr=None))
+        return pairs
 
     async def _mark_failed(self, round_id: int) -> None:
         async with self._session_factory() as session:

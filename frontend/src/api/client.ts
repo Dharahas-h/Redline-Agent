@@ -85,6 +85,28 @@ export async function getChange(changeId: number): Promise<Change> {
   return json(await fetch(`${BASE}/changes/${changeId}`));
 }
 
+// One human alignment correction: re-pair a current clause to a prior clause
+// (prevClauseId null marks it as a new clause).
+export interface AlignmentLink {
+  curr_clause_id: number;
+  prev_clause_id: number | null;
+}
+
+// Correct clause alignment for a round; the backend regenerates the diff and
+// interpretation and returns the refreshed feed.
+export async function updateAlignment(
+  roundId: number,
+  links: AlignmentLink[],
+): Promise<RoundChanges> {
+  return json(
+    await fetch(`${BASE}/rounds/${roundId}/alignment`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ links }),
+    }),
+  );
+}
+
 export async function createExport(negotiationId: number): Promise<Export> {
   return json(
     await fetch(`${BASE}/negotiations/${negotiationId}/export`, {

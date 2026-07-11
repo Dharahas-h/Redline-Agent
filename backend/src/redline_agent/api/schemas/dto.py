@@ -6,7 +6,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from redline_agent.domain import Change, Export, Negotiation, Round
+from redline_agent.domain import Change, ClauseLineage, Export, Negotiation, Round
+from redline_agent.pipeline.aligner import is_low_confidence
 
 
 class NegotiationCreate(BaseModel):
@@ -86,9 +87,16 @@ class ChangeOut(BaseModel):
     category: str | None = None
     favored_party: str | None = None
     risk_flag: str | None = None
+    # Alignment provenance for this clause (from clause lineage). Lets the feed
+    # flag uncertain or human-corrected matches (decision #5).
+    alignment_confidence: float | None = None
+    alignment_method: str | None = None
+    alignment_similarity: float | None = None
+    low_confidence: bool = False
+    overridden: bool = False
 
     @classmethod
-    def of(cls, c: Change) -> "ChangeOut":
+    def of(cls, c: Change, lineage: "ClauseLineage | None" = None) -> "ChangeOut":
         return cls(
             id=c.id,
             change_type=c.change_type.value,
@@ -101,4 +109,11 @@ class ChangeOut(BaseModel):
             category=c.category.value if c.category else None,
             favored_party=c.favored_party.value if c.favored_party else None,
             risk_flag=c.risk_flag,
+            alignment_confidence=lineage.confidence if lineage else None,
+            alignment_method=lineage.align_method.value if lineage else None,
+            alignment_similarity=lineage.similarity if lineage else None,
+            low_confidence=(
+                is_low_confidence(lineage.confidence) if lineage else False
+            ),
+            overridden=lineage.overridden if lineage else False,
         )

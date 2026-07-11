@@ -11,8 +11,12 @@ from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from redline_agent.domain import Change, Round
-from redline_agent.repositories.repos import ChangeRepository, RoundRepository
+from redline_agent.domain import Change, ClauseLineage, Round
+from redline_agent.repositories.repos import (
+    ChangeRepository,
+    ClauseLineageRepository,
+    RoundRepository,
+)
 
 
 @dataclass
@@ -44,6 +48,28 @@ class ChangeQueryService:
     async def get(self, change_id: int, tenant_id: str) -> Change | None:
         async with self._session_factory() as session:
             return await ChangeRepository(session).get(change_id, tenant_id)
+
+    async def alignment_for_round(
+        self, round_id: int, tenant_id: str
+    ) -> dict[int, ClauseLineage]:
+        """Lineage links for the round, keyed by current clause id.
+
+        Lets the feed flag low-confidence and overridden clause matches without
+        the caller reaching into the repositories.
+        """
+        async with self._session_factory() as session:
+            lineage = await ClauseLineageRepository(session).list_for_round(
+                round_id, tenant_id
+            )
+        return {link.curr_clause_id: link for link in lineage}
+
+    async def alignment_for_clause(
+        self, curr_clause_id: int, tenant_id: str
+    ) -> ClauseLineage | None:
+        async with self._session_factory() as session:
+            return await ClauseLineageRepository(session).get_by_curr_clause(
+                curr_clause_id, tenant_id
+            )
 
 
 def _matches(change: Change, filters: ChangeFilters) -> bool:

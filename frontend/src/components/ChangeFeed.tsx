@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { getRoundChanges } from "../api/client";
+import { getRoundChanges, updateAlignment } from "../api/client";
 import type { RoundChanges } from "../types";
 import { ChangeCard } from "./ChangeCard";
+import type { AlignmentCandidate } from "./AlignmentOverride";
 
 const CATEGORY_OPTIONS = [
   ["payment", "Payment"],
@@ -60,10 +61,35 @@ export function ChangeFeed({ roundId }: { roundId: number }) {
     };
   }, [roundId, hideCosmetic, category, favoredParty, riskOnly]);
 
+  // Correcting an alignment regenerates the diff server-side; swap in the
+  // refreshed feed it returns.
+  const handleOverride = async (
+    currClauseId: number,
+    prevClauseId: number | null,
+  ) => {
+    const refreshed = await updateAlignment(roundId, [
+      { curr_clause_id: currClauseId, prev_clause_id: prevClauseId },
+    ]);
+    setData(refreshed);
+  };
+
   if (error) return <p role="alert">Failed to load changes: {error}</p>;
   if (!data) return <p>Loading changes…</p>;
   if (data.status !== "ready")
     return <p data-testid="round-status">Round is {data.status}…</p>;
+
+  // Candidate prior clauses for re-pairing, derived from the feed itself.
+  const candidateMap = new Map<number, AlignmentCandidate>();
+  for (const c of data.changes) {
+    if (c.prev_clause_id !== null && !candidateMap.has(c.prev_clause_id)) {
+      const label = (c.raw_before ?? "").slice(0, 80) || `Clause ${c.prev_clause_id}`;
+      candidateMap.set(c.prev_clause_id, {
+        prev_clause_id: c.prev_clause_id,
+        label,
+      });
+    }
+  }
+  const candidates = [...candidateMap.values()];
 
   return (
     <section className="change-feed" data-testid="change-feed">
@@ -121,7 +147,14 @@ export function ChangeFeed({ roundId }: { roundId: number }) {
         <>
           <h3>{data.changes.length} changed clauses</h3>
           {data.changes.map((c) => (
-            <ChangeCard key={c.id} change={c} />
+            <ChangeCard
+              key={c.id}
+              change={c}
+              candidates={candidates.filter(
+                (cand) => cand.prev_clause_id !== c.prev_clause_id,
+              )}
+              onOverride={handleOverride}
+            />
           ))}
         </>
       )}
