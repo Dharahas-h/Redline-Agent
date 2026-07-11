@@ -1,5 +1,8 @@
-import { expect, test } from "vitest";
+import { afterAll, afterEach, beforeAll, expect, test } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { http, HttpResponse } from "msw";
+import { setupServer } from "msw/node";
 import { ChangeCard } from "./ChangeCard";
 import type { Change } from "../types";
 
@@ -57,4 +60,53 @@ test("omits the risk flag, favored-party, and category when absent", () => {
   expect(screen.queryByTestId("favored-party-badge")).not.toBeInTheDocument();
   expect(screen.queryByTestId("category-tag")).not.toBeInTheDocument();
   expect(screen.queryByTestId("risk-flag")).not.toBeInTheDocument();
+});
+
+const lineageServer = setupServer(
+  http.get("/clauses/:id/lineage", ({ params }) =>
+    HttpResponse.json({
+      clause_id: Number(params.id),
+      negotiation_id: 1,
+      entries: [
+        {
+          round_id: 1,
+          round_no: 1,
+          submitted_by_party: "Buyer",
+          clause_id: 3,
+          number_label: "1",
+          heading: "Cap",
+          text: "cap is $1M",
+          change: null,
+        },
+        {
+          round_id: 2,
+          round_no: 2,
+          submitted_by_party: "Seller",
+          clause_id: 5,
+          number_label: "1",
+          heading: "Cap",
+          text: "cap is $100k",
+          change: BASE,
+        },
+      ],
+    }),
+  ),
+);
+
+beforeAll(() => lineageServer.listen({ onUnhandledRequest: "error" }));
+afterEach(() => lineageServer.resetHandlers());
+afterAll(() => lineageServer.close());
+
+test("drills into the clause's cross-round lineage from a change", async () => {
+  const user = userEvent.setup();
+  render(<ChangeCard change={BASE} />);
+
+  // Lineage is not fetched until the user opens the drill-down.
+  expect(screen.queryByTestId("clause-lineage")).not.toBeInTheDocument();
+
+  await user.click(screen.getByTestId("show-lineage"));
+
+  expect(await screen.findByTestId("clause-lineage")).toBeInTheDocument();
+  const entries = await screen.findAllByTestId("lineage-entry");
+  expect(entries).toHaveLength(2);
 });

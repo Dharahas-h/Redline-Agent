@@ -1,6 +1,8 @@
+import { useState } from "react";
 import type { Change } from "../types";
 import { AlignmentOverride } from "./AlignmentOverride";
 import type { AlignmentCandidate } from "./AlignmentOverride";
+import { ClauseLineage } from "./ClauseLineage";
 
 const LABELS: Record<string, string> = {
   added: "Added",
@@ -39,6 +41,7 @@ export function ChangeCard({
   candidates?: AlignmentCandidate[];
   onOverride?: (currClauseId: number, prevClauseId: number | null) => void;
 }) {
+  const [showLineage, setShowLineage] = useState(false);
   return (
     <article className="change-card" data-testid="change-card">
       <header>
@@ -115,6 +118,19 @@ export function ChangeCard({
           candidates={candidates ?? []}
           onOverride={onOverride}
         />
+      )}
+      {change.curr_clause_id !== null && (
+        <div className="clause-lineage-drilldown">
+          <button
+            type="button"
+            data-testid="show-lineage"
+            aria-expanded={showLineage}
+            onClick={() => setShowLineage((s) => !s)}
+          >
+            {showLineage ? "Hide clause history" : "Show clause history"}
+          </button>
+          {showLineage && <ClauseLineage clauseId={change.curr_clause_id} />}
+        </div>
       )}
     </article>
   );

@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from redline_agent.api.routers import changes, export, negotiations
+from redline_agent.api.routers import changes, clauses, export, negotiations
 from redline_agent.config import Settings, get_settings
 from redline_agent.infra.blob_store import BlobStore, InMemoryBlobStore
 from redline_agent.infra.embedder import Embedder, build_embedder
@@ -62,6 +62,7 @@ def create_app(
 
     app.include_router(negotiations.router)
     app.include_router(changes.router)
+    app.include_router(clauses.router)
     app.include_router(export.router)
 
     @app.get("/health")

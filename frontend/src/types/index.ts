@@ -48,6 +48,27 @@ export interface RoundChanges {
   changes: Change[];
 }
 
+// One round's view of a clause in its cross-round lineage.
+export interface LineageEntry {
+  round_id: number;
+  round_no: number;
+  submitted_by_party: string;
+  clause_id: number;
+  number_label: string | null;
+  heading: string | null;
+  text: string;
+  // How the clause changed from the prior round; null in the round it first
+  // appears with no prior.
+  change: Change | null;
+}
+
+// A clause's evolution across every round of the negotiation, in order.
+export interface ClauseLineage {
+  clause_id: number;
+  negotiation_id: number;
+  entries: LineageEntry[];
+}
+
 export interface Export {
   id: number;
   negotiation_id: number;

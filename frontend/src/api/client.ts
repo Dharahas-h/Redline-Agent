@@ -2,6 +2,7 @@
 
 import type {
   Change,
+  ClauseLineage,
   Export,
   Negotiation,
   NegotiationDetail,
@@ -83,6 +84,14 @@ export async function getRoundChanges(
 
 export async function getChange(changeId: number): Promise<Change> {
   return json(await fetch(`${BASE}/changes/${changeId}`));
+}
+
+// A clause's full cross-round evolution: how its text and changes progressed
+// over every round of the negotiation.
+export async function getClauseLineage(
+  clauseId: number,
+): Promise<ClauseLineage> {
+  return json(await fetch(`${BASE}/clauses/${clauseId}/lineage`));
 }
 
 // One human alignment correction: re-pair a current clause to a prior clause

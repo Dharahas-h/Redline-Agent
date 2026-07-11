@@ -304,6 +304,39 @@ async def test_patch_alignment_override_regenerates_feed(client):
     assert added["alignment_method"] == "override"
 
 
+ROUND_3 = make_docx(["1. Payment", "Buyer pays in 60 days.", "2. Term", "One year."])
+
+
+async def test_clause_lineage_traces_the_clause_across_rounds(client):
+    neg = (
+        await client.post(
+            "/negotiations", json={"title": "M", "represented_party": "Buyer"}
+        )
+    ).json()
+    await _upload(client, neg["id"], "Buyer", ROUND_1)
+    await _upload(client, neg["id"], "Seller", ROUND_2)
+    r3 = await _upload(client, neg["id"], "Buyer", ROUND_3)
+    round3_id = r3.json()["id"]
+
+    feed = (await client.get(f"/rounds/{round3_id}/changes")).json()
+    payment = next(c for c in feed["changes"] if "60 days" in (c["raw_after"] or ""))
+
+    lineage = await client.get(f"/clauses/{payment['curr_clause_id']}/lineage")
+    assert lineage.status_code == 200
+    body = lineage.json()
+    assert body["clause_id"] == payment["curr_clause_id"]
+    assert [e["round_no"] for e in body["entries"]] == [1, 2, 3]
+    assert "30 days" in body["entries"][0]["text"]
+    assert "60 days" in body["entries"][2]["text"]
+    # The first round has no change into it; later rounds carry the modification.
+    assert body["entries"][0]["change"] is None
+    assert body["entries"][2]["change"]["change_type"] == "modified"
+
+
+async def test_clause_lineage_unknown_clause_returns_404(client):
+    assert (await client.get("/clauses/999999/lineage")).status_code == 404
+
+
 async def test_patch_alignment_unknown_round_returns_404(client):
     resp = await client.patch(
         "/rounds/999/alignment", json={"links": []}

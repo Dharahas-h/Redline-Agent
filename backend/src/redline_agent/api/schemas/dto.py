@@ -6,8 +6,13 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from typing import TYPE_CHECKING
+
 from redline_agent.domain import Change, ClauseLineage, Export, Negotiation, Round
 from redline_agent.pipeline.aligner import is_low_confidence
+
+if TYPE_CHECKING:
+    from redline_agent.services.change_query import ClauseLineageView, LineageEntry
 
 
 class NegotiationCreate(BaseModel):
@@ -116,4 +121,52 @@ class ChangeOut(BaseModel):
                 is_low_confidence(lineage.confidence) if lineage else False
             ),
             overridden=lineage.overridden if lineage else False,
+        )
+
+
+class LineageEntryOut(BaseModel):
+    """One round's view of a clause in its cross-round lineage."""
+
+    round_id: int
+    round_no: int
+    submitted_by_party: str
+    clause_id: int
+    number_label: str | None = None
+    heading: str | None = None
+    text: str
+    # The change into this round's clause (how it changed from the prior round);
+    # null for the round where the clause first appears with no prior.
+    change: ChangeOut | None = None
+
+    @classmethod
+    def of(cls, entry: "LineageEntry") -> "LineageEntryOut":
+        return cls(
+            round_id=entry.round.id,
+            round_no=entry.round.round_no,
+            submitted_by_party=entry.round.submitted_by_party,
+            clause_id=entry.clause.id,
+            number_label=entry.clause.number_label,
+            heading=entry.clause.heading,
+            text=entry.clause.text,
+            change=(
+                ChangeOut.of(entry.change, entry.lineage)
+                if entry.change is not None
+                else None
+            ),
+        )
+
+
+class ClauseLineageOut(BaseModel):
+    """A clause's evolution across every round of the negotiation, in order."""
+
+    clause_id: int
+    negotiation_id: int
+    entries: list[LineageEntryOut] = []
+
+    @classmethod
+    def of(cls, view: "ClauseLineageView") -> "ClauseLineageOut":
+        return cls(
+            clause_id=view.clause_id,
+            negotiation_id=view.negotiation_id,
+            entries=[LineageEntryOut.of(e) for e in view.entries],
         )

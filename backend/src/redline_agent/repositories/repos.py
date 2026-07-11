@@ -263,6 +263,22 @@ class ClauseLineageRepository:
         row = (await self._session.scalars(stmt)).first()
         return _to_lineage(row) if row is not None else None
 
+    async def get_by_prev_clause(
+        self, prev_clause_id: int, tenant_id: str
+    ) -> ClauseLineage | None:
+        """The link whose prior clause is ``prev_clause_id`` (forward step).
+
+        Follows the chain into the next round. A split points several current
+        clauses at one prior; we take the first, so lineage follows the primary
+        forward chain.
+        """
+        stmt = select(ClauseLineageRow).where(
+            ClauseLineageRow.prev_clause_id == prev_clause_id,
+            ClauseLineageRow.tenant_id == tenant_id,
+        )
+        row = (await self._session.scalars(stmt)).first()
+        return _to_lineage(row) if row is not None else None
+
     async def list_for_round(
         self, round_id: int, tenant_id: str
     ) -> list[ClauseLineage]:
@@ -374,6 +390,19 @@ class ChangeRepository:
         if row is None or row.tenant_id != tenant_id:
             return None
         return _to_change(row)
+
+    async def get_by_curr_clause(
+        self, curr_clause_id: int, tenant_id: str
+    ) -> Change | None:
+        """The change into ``curr_clause_id`` — how that clause changed from the
+        prior round. ``None`` for a clause that carries no change (e.g. a
+        first-round clause)."""
+        stmt = select(ChangeRow).where(
+            ChangeRow.curr_clause_id == curr_clause_id,
+            ChangeRow.tenant_id == tenant_id,
+        )
+        row = (await self._session.scalars(stmt)).first()
+        return _to_change(row) if row is not None else None
 
     async def delete_for_round(self, to_round_id: int, tenant_id: str) -> None:
         """Drop this round's changes so they can be regenerated from scratch."""
