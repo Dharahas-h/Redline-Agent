@@ -1,0 +1,110 @@
+/* Viljetech design tokens — recreated natively (no import from the reference folder). */
+
+/* Self-hosted Kalice display serif (binary copied into public/fonts). */
+@font-face {
+  font-family: "Kalice";
+  src:
+    url("/fonts/Kalice-Regular.woff2") format("woff2"),
+    url("/fonts/Kalice-Regular.woff") format("woff");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Kalice";
+  src:
+    url("/fonts/Kalice-Italic.woff2") format("woff2"),
+    url("/fonts/Kalice-Italic.woff") format("woff");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+:root {
+  /* Page + ink */
+  --vt-snow: #f6f9fc;
+  --vt-soft: #ffffff;
+  --vt-cloud: #dde3e8;
+  --vt-fog: #c3cbd3;
+  --vt-slate: #7c8e9d;
+  --vt-charcoal: #2a2f36;
+  --vt-navy: #1b2d45;
+  --vt-ink: #1b2d45;
+
+  /* Accent (the ONE accent) */
+  --vt-primary: #3a63e0;
+  --vt-primary-ink: #2849b8;
+  --vt-primary-wash: #e1e7fb;
+  --vt-cta-hover: #0e1b2c;
+
+  /* Dark device (Complete screen only) */
+  --vt-dark-navy: #1b2d45;
+  --vt-dark-ink: #f6f9fc;
+  --vt-dark-ink-2: #c3cbd3;
+  --vt-dark-hairline: #2a3f5a;
+  --vt-mint: #8dd3d2;
+  --vt-mint-ink: #3e908f;
+
+  /* Verdict data-viz (ScreeningResults verdicts ONLY) */
+  --vt-forest: #2e7d66;
+  --vt-forest-ink: #1e5346;
+  --vt-forest-wash: #ccded7;
+  --vt-terracotta: #c16236;
+  --vt-terracotta-ink: #8c4221;
+  --vt-terracotta-wash: #f1d9cb;
+
+  /* Type */
+  --vt-serif: "Kalice", "Cormorant Garamond", "Times New Roman", serif;
+  --vt-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --vt-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* Shape / motion */
+  --vt-radius-input: 12px;
+  --vt-radius-card: 20px;
+  --vt-radius-pill: 999px;
+  --vt-radius-hero: 24px;
+  --vt-hairline: 1px solid #dde3e8;
+  --vt-focus-ring: 0 0 0 3px rgba(58, 99, 224, 0.28);
+  --vt-popover-shadow: 0 24px 48px -28px rgba(27, 45, 69, 0.22);
+}
+
+/* Flat snow page — no gradient on paper surfaces. */
+body {
+  background-color: var(--vt-snow);
+  background-image: none;
+  min-height: 100vh;
+}
+
+::selection {
+  background: #3a63e0;
+  color: #f6f9fc;
+}
+
+/* Reusable mono eyebrow with a 6px cobalt dot. */
+.vt-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--vt-mono);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--vt-slate);
+}
+.vt-eyebrow::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--vt-primary);
+  flex-shrink: 0;
+}
+/* The dark card flips the eyebrow accent to mint. */
+.vt-eyebrow--mint {
+  color: var(--vt-dark-ink-2);
+}
+.vt-eyebrow--mint::before {
+  background: var(--vt-mint);
+}

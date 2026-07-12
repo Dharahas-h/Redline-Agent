@@ -1,36 +1,79 @@
 import { useState } from "react";
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  Collapse,
+  Stack,
+  Typography,
+} from "@mui/material";
+import HistoryIcon from "@mui/icons-material/HistoryRounded";
 import type { Change } from "../types";
 import { AlignmentOverride } from "./AlignmentOverride";
 import type { AlignmentCandidate } from "./AlignmentOverride";
 import { ClauseLineage } from "./ClauseLineage";
+import {
+  C,
+  CategoryTag,
+  ChangeTypeLabel,
+  FavoredPartyBadge,
+  MaterialityBadge,
+} from "./common/redline";
 
-const LABELS: Record<string, string> = {
-  added: "Added",
-  removed: "Removed",
-  modified: "Modified",
-};
+const MONO = '"JetBrains Mono", ui-monospace, monospace';
 
-const MATERIALITY_LABELS: Record<string, string> = {
-  substantive: "Substantive",
-  cosmetic: "Cosmetic",
-};
-
-// Favored-party is stored relative to the represented party, so the badge maps
-// straight to the user's point of view.
-const FAVORED_PARTY_LABELS: Record<string, string> = {
-  represented: "Favors me",
-  counterparty: "Favors them",
-  neutral: "Neutral",
-};
-
-const CATEGORY_LABELS: Record<string, string> = {
-  payment: "Payment",
-  liability: "Liability",
-  ip: "IP",
-  termination: "Termination",
-  confidentiality: "Confidentiality",
-  other: "Other",
-};
+// One neutral monospace panel of raw clause text. The diff stays colorless —
+// the favored-party badge carries the only verdict color on the card.
+function RawPanel({
+  label,
+  text,
+  testId,
+}: {
+  label: string;
+  text: string;
+  testId: string;
+}) {
+  return (
+    <Box sx={{ flex: 1, minWidth: 0 }}>
+      <Box
+        component="span"
+        sx={{
+          fontFamily: MONO,
+          fontSize: 11,
+          fontWeight: 500,
+          letterSpacing: "0.12em",
+          textTransform: "uppercase",
+          color: C.slate,
+        }}
+      >
+        {label}
+      </Box>
+      <Box
+        component="pre"
+        data-testid={testId}
+        sx={{
+          m: 0,
+          mt: 0.75,
+          p: 1.5,
+          bgcolor: C.snow,
+          border: `1px solid ${C.cloud}`,
+          borderRadius: 2,
+          fontFamily: MONO,
+          fontSize: 13,
+          lineHeight: 1.55,
+          color: C.navy,
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+        }}
+      >
+        {text}
+      </Box>
+    </Box>
+  );
+}
 
 export function ChangeCard({
   change,
@@ -43,95 +86,136 @@ export function ChangeCard({
 }) {
   const [showLineage, setShowLineage] = useState(false);
   return (
-    <article className="change-card" data-testid="change-card">
-      <header>
-        <span className="change-type" data-testid="change-type">
-          {LABELS[change.change_type] ?? change.change_type}
-        </span>
-        {change.low_confidence && (
-          <span
-            className="low-confidence-badge"
-            data-testid="low-confidence-badge"
+    <Card
+      component="article"
+      variant="outlined"
+      className="change-card"
+      data-testid="change-card"
+    >
+      <CardContent sx={{ p: { xs: 2, md: 2.5 } }}>
+        <Stack
+          direction="row"
+          spacing={1}
+          useFlexGap
+          flexWrap="wrap"
+          sx={{ alignItems: "center", mb: 1.5 }}
+          component="header"
+        >
+          <ChangeTypeLabel type={change.change_type} />
+          <Box sx={{ flexGrow: 1 }} />
+          {change.low_confidence && (
+            <Chip
+              size="small"
+              label="Uncertain match — please review"
+              className="low-confidence-badge"
+              data-testid="low-confidence-badge"
+              role="note"
+              sx={{
+                bgcolor: C.saffronWash,
+                color: C.saffron,
+                fontWeight: 600,
+                fontSize: 12,
+              }}
+            />
+          )}
+          {change.overridden && (
+            <Chip
+              size="small"
+              label="Match corrected"
+              className="overridden-badge"
+              data-testid="overridden-badge"
+              sx={{
+                bgcolor: C.primaryWash,
+                color: C.primaryInk,
+                fontWeight: 600,
+                fontSize: 12,
+              }}
+            />
+          )}
+          {change.materiality && (
+            <MaterialityBadge materiality={change.materiality} />
+          )}
+          {change.favored_party && (
+            <FavoredPartyBadge favored={change.favored_party} />
+          )}
+          {change.category && <CategoryTag category={change.category} />}
+        </Stack>
+
+        {change.risk_flag && (
+          <Alert
+            severity="warning"
+            variant="outlined"
             role="note"
+            className="risk-flag"
+            data-testid="risk-flag"
+            sx={{ mb: 2, borderRadius: 2 }}
           >
-            Uncertain match — please review
-          </span>
+            {change.risk_flag}
+          </Alert>
         )}
-        {change.overridden && (
-          <span className="overridden-badge" data-testid="overridden-badge">
-            Match corrected
-          </span>
-        )}
-        {change.materiality && (
-          <span
-            className={`materiality-badge ${change.materiality}`}
-            data-testid="materiality-badge"
+
+        {change.summary && (
+          <Box
+            className="summary"
+            data-testid="summary"
+            data-machine-generated="true"
+            sx={{ mb: 2 }}
           >
-            {MATERIALITY_LABELS[change.materiality] ?? change.materiality}
-          </span>
+            <Typography variant="body1" sx={{ color: C.navy }}>
+              {change.summary}
+            </Typography>
+            <Typography
+              className="disclaimer"
+              variant="caption"
+              sx={{ color: C.slate, display: "block", mt: 0.5 }}
+            >
+              Machine-generated — attorney work-product for review.
+            </Typography>
+          </Box>
         )}
-        {change.favored_party && (
-          <span
-            className={`favored-party-badge ${change.favored_party}`}
-            data-testid="favored-party-badge"
-          >
-            {FAVORED_PARTY_LABELS[change.favored_party] ?? change.favored_party}
-          </span>
+
+        <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+          {change.raw_before !== null && (
+            <RawPanel
+              label="Before"
+              text={change.raw_before}
+              testId="raw-before"
+            />
+          )}
+          {change.raw_after !== null && (
+            <RawPanel label="After" text={change.raw_after} testId="raw-after" />
+          )}
+        </Stack>
+
+        {onOverride && change.curr_clause_id !== null && (
+          <Box sx={{ mt: 2 }}>
+            <AlignmentOverride
+              change={change}
+              candidates={candidates ?? []}
+              onOverride={onOverride}
+            />
+          </Box>
         )}
-        {change.category && (
-          <span
-            className={`category-tag ${change.category}`}
-            data-testid="category-tag"
-          >
-            {CATEGORY_LABELS[change.category] ?? change.category}
-          </span>
+
+        {change.curr_clause_id !== null && (
+          <Box className="clause-lineage-drilldown" sx={{ mt: 1 }}>
+            <Button
+              type="button"
+              size="small"
+              data-testid="show-lineage"
+              aria-expanded={showLineage}
+              onClick={() => setShowLineage((s) => !s)}
+              startIcon={<HistoryIcon />}
+              sx={{ color: "text.secondary", px: 1 }}
+            >
+              {showLineage ? "Hide clause history" : "Show clause history"}
+            </Button>
+            <Collapse in={showLineage} unmountOnExit>
+              <ClauseLineage clauseId={change.curr_clause_id} />
+            </Collapse>
+          </Box>
         )}
-      </header>
-      {change.risk_flag && (
-        <p className="risk-flag" data-testid="risk-flag" role="note">
-          ⚠ {change.risk_flag}
-        </p>
-      )}
-      {change.summary && (
-        <div className="summary" data-testid="summary" data-machine-generated="true">
-          <p>{change.summary}</p>
-          <small className="disclaimer">
-            Machine-generated — attorney work-product for review.
-          </small>
-        </div>
-      )}
-      {change.raw_before !== null && (
-        <div className="raw before">
-          <h4>Before</h4>
-          <pre data-testid="raw-before">{change.raw_before}</pre>
-        </div>
-      )}
-      {change.raw_after !== null && (
-        <div className="raw after">
-          <h4>After</h4>
-          <pre data-testid="raw-after">{change.raw_after}</pre>
-        </div>
-      )}
-      {onOverride && change.curr_clause_id !== null && (
-        <AlignmentOverride
-          change={change}
-          candidates={candidates ?? []}
-          onOverride={onOverride}
-        />
-      )}
-      {change.curr_clause_id !== null && (
-        <div className="clause-lineage-drilldown">
-          <button
-            type="button"
-            data-testid="show-lineage"
-            aria-expanded={showLineage}
-            onClick={() => setShowLineage((s) => !s)}
-          >
-            {showLineage ? "Hide clause history" : "Show clause history"}
-          </button>
-          {showLineage && <ClauseLineage clauseId={change.curr_clause_id} />}
-        </div>
-      )}
-    </article>
+      </CardContent>
+    </Card>
   );
 }

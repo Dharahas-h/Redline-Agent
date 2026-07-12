@@ -1,3 +1,4 @@
+import { Alert, AlertTitle, Box, Stack } from "@mui/material";
 import type { StructuralAlert } from "../types";
 
 const ALERT_LABELS: Record<string, string> = {
@@ -12,26 +13,34 @@ const ALERT_LABELS: Record<string, string> = {
 export function StructuralAlerts({ alerts }: { alerts: StructuralAlert[] }) {
   if (alerts.length === 0) return null;
   return (
-    <section
+    <Stack
+      component="section"
+      spacing={1.5}
       className="structural-alerts"
       data-testid="structural-alerts"
       aria-label="Structural alerts"
     >
       {alerts.map((alert) => (
-        <div
+        <Alert
           key={alert.id}
+          severity="warning"
+          variant="outlined"
           className={`structural-alert ${alert.alert_type}`}
           data-testid="structural-alert"
-          role="alert"
+          sx={{ borderRadius: 3, alignItems: "flex-start" }}
         >
-          <span className="alert-type" data-testid="alert-type">
+          <AlertTitle
+            className="alert-type"
+            data-testid="alert-type"
+            sx={{ fontWeight: 600, mb: 0.25 }}
+          >
             {ALERT_LABELS[alert.alert_type] ?? alert.alert_type}
-          </span>
-          <p className="alert-detail" data-testid="alert-detail">
-            ⚠ {alert.detail}
-          </p>
-        </div>
+          </AlertTitle>
+          <Box className="alert-detail" data-testid="alert-detail">
+            {alert.detail}
+          </Box>
+        </Alert>
       ))}
-    </section>
+    </Stack>
   );
 }

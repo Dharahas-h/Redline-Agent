@@ -1,9 +1,20 @@
 import { useEffect, useState } from "react";
+import {
+  Box,
+  FormControlLabel,
+  Paper,
+  Skeleton,
+  Stack,
+  Switch,
+  TextField,
+  Typography,
+} from "@mui/material";
 import { getRoundChanges, updateAlignment } from "../api/client";
 import type { RoundChanges } from "../types";
 import { ChangeCard } from "./ChangeCard";
 import { StructuralAlerts } from "./StructuralAlerts";
 import type { AlignmentCandidate } from "./AlignmentOverride";
+import { C } from "./common/redline";
 
 const CATEGORY_OPTIONS = [
   ["payment", "Payment"],
@@ -19,6 +30,25 @@ const FAVORED_PARTY_OPTIONS = [
   ["counterparty", "Favors them"],
   ["neutral", "Neutral"],
 ] as const;
+
+// Skeleton stand-ins keep the feed layout stable while the pipeline runs or a
+// filter refetches, so nothing jumps when the real cards arrive.
+function FeedSkeletons() {
+  return (
+    <Stack spacing={1.5}>
+      {[0, 1, 2].map((i) => (
+        <Paper key={i} variant="outlined" sx={{ p: 2.5, borderRadius: 5 }}>
+          <Skeleton width={90} height={18} />
+          <Skeleton width="70%" height={26} sx={{ mt: 1 }} />
+          <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ mt: 2 }}>
+            <Skeleton variant="rounded" height={72} sx={{ flex: 1 }} />
+            <Skeleton variant="rounded" height={72} sx={{ flex: 1 }} />
+          </Stack>
+        </Paper>
+      ))}
+    </Stack>
+  );
+}
 
 export function ChangeFeed({ roundId }: { roundId: number }) {
   const [data, setData] = useState<RoundChanges | null>(null);
@@ -74,16 +104,44 @@ export function ChangeFeed({ roundId }: { roundId: number }) {
     setData(refreshed);
   };
 
-  if (error) return <p role="alert">Failed to load changes: {error}</p>;
-  if (!data) return <p>Loading changes…</p>;
+  if (error)
+    return (
+      <Typography role="alert" color="error" sx={{ mt: 2 }}>
+        Failed to load changes: {error}
+      </Typography>
+    );
+
+  if (!data)
+    return (
+      <Box>
+        <Box component="span" className="vt-eyebrow" sx={{ mb: 2, display: "inline-flex" }}>
+          Loading changes…
+        </Box>
+        <FeedSkeletons />
+      </Box>
+    );
+
   if (data.status !== "ready")
-    return <p data-testid="round-status">Round is {data.status}…</p>;
+    return (
+      <Box>
+        <Box
+          component="span"
+          className="vt-eyebrow"
+          data-testid="round-status"
+          sx={{ mb: 2, display: "inline-flex" }}
+        >
+          Analyzing round — {data.status}…
+        </Box>
+        <FeedSkeletons />
+      </Box>
+    );
 
   // Candidate prior clauses for re-pairing, derived from the feed itself.
   const candidateMap = new Map<number, AlignmentCandidate>();
   for (const c of data.changes) {
     if (c.prev_clause_id !== null && !candidateMap.has(c.prev_clause_id)) {
-      const label = (c.raw_before ?? "").slice(0, 80) || `Clause ${c.prev_clause_id}`;
+      const label =
+        (c.raw_before ?? "").slice(0, 80) || `Clause ${c.prev_clause_id}`;
       candidateMap.set(c.prev_clause_id, {
         prev_clause_id: c.prev_clause_id,
         label,
@@ -93,23 +151,48 @@ export function ChangeFeed({ roundId }: { roundId: number }) {
   const candidates = [...candidateMap.values()];
 
   return (
-    <section className="change-feed" data-testid="change-feed">
+    <Box component="section" className="change-feed" data-testid="change-feed">
       <StructuralAlerts alerts={data.alerts ?? []} />
-      <div className="feed-controls">
-        <label>
-          <input
-            type="checkbox"
-            checked={hideCosmetic}
-            onChange={(e) => setHideCosmetic(e.target.checked)}
+
+      <Paper
+        variant="outlined"
+        className="feed-controls"
+        sx={{
+          position: "sticky",
+          top: 72,
+          zIndex: 2,
+          p: 1.5,
+          my: 2,
+          borderRadius: 4,
+          backdropFilter: "blur(8px)",
+          backgroundColor: "rgba(255,255,255,0.86)",
+        }}
+      >
+        <Stack
+          direction="row"
+          spacing={2}
+          useFlexGap
+          flexWrap="wrap"
+          sx={{ alignItems: "center" }}
+        >
+          <FormControlLabel
+            control={
+              <Switch
+                checked={hideCosmetic}
+                onChange={(e) => setHideCosmetic(e.target.checked)}
+              />
+            }
+            label="Hide cosmetic changes"
           />
-          Hide cosmetic changes
-        </label>
-        <label>
-          Category
-          <select
-            aria-label="Filter by category"
+          <TextField
+            select
+            label="Category"
             value={category}
             onChange={(e) => setCategory(e.target.value)}
+            SelectProps={{ native: true }}
+            inputProps={{ "aria-label": "Filter by category" }}
+            size="small"
+            sx={{ minWidth: 170 }}
           >
             <option value="">All categories</option>
             {CATEGORY_OPTIONS.map(([value, label]) => (
@@ -117,14 +200,16 @@ export function ChangeFeed({ roundId }: { roundId: number }) {
                 {label}
               </option>
             ))}
-          </select>
-        </label>
-        <label>
-          Favored party
-          <select
-            aria-label="Filter by favored party"
+          </TextField>
+          <TextField
+            select
+            label="Favored party"
             value={favoredParty}
             onChange={(e) => setFavoredParty(e.target.value)}
+            SelectProps={{ native: true }}
+            inputProps={{ "aria-label": "Filter by favored party" }}
+            size="small"
+            sx={{ minWidth: 170 }}
           >
             <option value="">Either side</option>
             {FAVORED_PARTY_OPTIONS.map(([value, label]) => (
@@ -132,22 +217,42 @@ export function ChangeFeed({ roundId }: { roundId: number }) {
                 {label}
               </option>
             ))}
-          </select>
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={riskOnly}
-            onChange={(e) => setRiskOnly(e.target.checked)}
+          </TextField>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={riskOnly}
+                onChange={(e) => setRiskOnly(e.target.checked)}
+              />
+            }
+            label="Flagged for review only"
           />
-          Flagged for review only
-        </label>
-      </div>
+        </Stack>
+      </Paper>
+
       {data.changes.length === 0 ? (
-        <p data-testid="no-changes">No changes in this round.</p>
+        <Paper
+          variant="outlined"
+          sx={{
+            p: 6,
+            borderRadius: 5,
+            textAlign: "center",
+            borderStyle: "dashed",
+          }}
+        >
+          <Typography
+            data-testid="no-changes"
+            variant="h6"
+            sx={{ color: C.slate, fontWeight: 500 }}
+          >
+            No changes in this round.
+          </Typography>
+        </Paper>
       ) : (
-        <>
-          <h3>{data.changes.length} changed clauses</h3>
+        <Stack spacing={2}>
+          <Typography variant="overline" sx={{ color: C.slate }}>
+            {data.changes.length} changed clauses
+          </Typography>
           {data.changes.map((c) => (
             <ChangeCard
               key={c.id}
@@ -158,8 +263,8 @@ export function ChangeFeed({ roundId }: { roundId: number }) {
               onOverride={handleOverride}
             />
           ))}
-        </>
+        </Stack>
       )}
-    </section>
+    </Box>
   );
 }

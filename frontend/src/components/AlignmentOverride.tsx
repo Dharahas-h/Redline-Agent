@@ -1,5 +1,8 @@
 import { useState } from "react";
+import { Box, Button, Stack, TextField } from "@mui/material";
+import TuneIcon from "@mui/icons-material/TuneRounded";
 import type { Change } from "../types";
+import { C } from "./common/redline";
 
 // A prior clause the current clause could be re-paired to. Derived from the
 // feed, so no extra endpoint is needed to populate the choices.
@@ -35,19 +38,43 @@ export function AlignmentOverride({
   };
 
   return (
-    <div className="alignment-override" data-testid="alignment-override">
+    <Box className="alignment-override" data-testid="alignment-override">
       {!open ? (
-        <button type="button" onClick={() => setOpen(true)}>
+        <Button
+          type="button"
+          size="small"
+          variant="outlined"
+          startIcon={<TuneIcon />}
+          onClick={() => setOpen(true)}
+        >
           Fix match
-        </button>
+        </Button>
       ) : (
-        <form onSubmit={submit} aria-label="fix-alignment">
-          <label>
-            Correct prior clause
-            <select
-              aria-label="prior clause"
+        <Box
+          component="form"
+          onSubmit={submit}
+          aria-label="fix-alignment"
+          sx={{
+            p: 2,
+            bgcolor: C.snow,
+            border: `1px solid ${C.cloud}`,
+            borderRadius: 2,
+          }}
+        >
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            spacing={1.5}
+            sx={{ alignItems: { sm: "flex-end" } }}
+          >
+            <TextField
+              select
+              label="Correct prior clause"
               value={choice}
               onChange={(e) => setChoice(e.target.value)}
+              SelectProps={{ native: true }}
+              inputProps={{ "aria-label": "prior clause" }}
+              size="small"
+              fullWidth
             >
               <option value="">New clause (no prior match)</option>
               {candidates.map((c) => (
@@ -55,14 +82,18 @@ export function AlignmentOverride({
                   {c.label}
                 </option>
               ))}
-            </select>
-          </label>
-          <button type="submit">Apply</button>
-          <button type="button" onClick={() => setOpen(false)}>
-            Cancel
-          </button>
-        </form>
+            </TextField>
+            <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
+              <Button type="submit" variant="contained" size="small">
+                Apply
+              </Button>
+              <Button type="button" size="small" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+            </Stack>
+          </Stack>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }
