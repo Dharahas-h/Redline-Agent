@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from redline_agent.api.routers import changes, clauses, export, negotiations
 from redline_agent.config import Settings, get_settings
-from redline_agent.infra.blob_store import BlobStore, InMemoryBlobStore
+from redline_agent.infra.blob_store import BlobStore, build_blob_store
 from redline_agent.infra.embedder import Embedder, build_embedder
 from redline_agent.infra.llm import LLMInterpreter, build_interpreter
 from redline_agent.infra.llm.adjudicator import (
@@ -34,7 +34,7 @@ def create_app(
     settings = settings or get_settings()
     engine = engine if engine is not None else make_engine(settings.db_url)
     session_factory = make_session_factory(engine)
-    blob_store = blob_store or InMemoryBlobStore()
+    blob_store = blob_store or build_blob_store(settings)
     interpreter = interpreter or build_interpreter(settings)
     embedder = embedder or build_embedder(settings)
     adjudicator = adjudicator or build_adjudicator(settings)

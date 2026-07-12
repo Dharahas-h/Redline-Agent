@@ -16,6 +16,7 @@ dependencies = [
     "pydantic-settings",
     "alembic",
     "openai>=1.40",
+    "azure-storage-blob>=12",
 ]
 
 [project.optional-dependencies]

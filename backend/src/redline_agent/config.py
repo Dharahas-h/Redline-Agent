@@ -64,6 +64,11 @@ class Settings(BaseSettings):
         default=None,
         alias="BLOB_CONNECTION_STRING"
     )
+    # Container that holds the round/export .docx blobs; created on first use.
+    blob_container: str = Field(
+        default="rounds",
+        alias="BLOB_CONTAINER"
+    )
 
 
 def get_settings() -> Settings:
