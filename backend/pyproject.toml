@@ -15,6 +15,7 @@ dependencies = [
     "pydantic>=2",
     "pydantic-settings",
     "alembic",
+    "openai>=1.40",
 ]
 
 [project.optional-dependencies]

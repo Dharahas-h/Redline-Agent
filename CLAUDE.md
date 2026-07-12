@@ -1,4 +1,4 @@
-# Redline Agent
+<!-- # Redline Agent
 
 Multi-round negotiation tracker for `.docx` legal contracts. Contributors — human
 or agent — orient from the docs below, then pick up work from the backlog.
@@ -51,4 +51,4 @@ Status strings use the canonical triage labels in
 
 ## Definition of done
 Acceptance criteria met · tests written-first and passing · glossary terms used
-· issue Status updated · Comments appended · no unrelated changes.
+· issue Status updated · Comments appended · no unrelated changes. -->

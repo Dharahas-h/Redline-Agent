@@ -2,8 +2,8 @@
 
 The embedder turns clause text into a vector so the aligner can measure clause
 similarity across rounds. It is a Protocol so the provider is swappable and
-benchmarked before the default is locked; the default embeddings are Azure
-``text-embedding-3-large``.
+benchmarked before the default is locked; the default embeddings are
+``text-embedding-3-large`` on an OpenAI-compatible endpoint.
 
 ``FakeEmbedder`` is the deterministic, offline stand-in used by tests and by
 local dev when no provider is configured (mirroring the ``FakeInterpreter`` and
@@ -73,47 +73,46 @@ class FakeEmbedder:
         return vectors
 
 
-class AzureEmbedder:
-    """Azure OpenAI implementation of the ``Embedder`` Protocol.
+class OpenAIEmbedder:
+    """OpenAI-compatible implementation of the ``Embedder`` Protocol.
 
-    The default embeddings in deployment (decision #7). Never exercised by tests
-    (no test hits the network — ``FakeEmbedder`` stands in); the ``openai``
-    client is imported lazily so this module imports cleanly without it.
+    The default embeddings in deployment (decision #7). Drives any
+    OpenAI-compatible embeddings endpoint through the standard ``AsyncOpenAI``
+    client (``base_url`` unset for api.openai.com, or an Azure AI Foundry
+    ``/openai/v1/`` endpoint). Never exercised by tests (no test hits the
+    network — ``FakeEmbedder`` stands in); the ``openai`` client is imported
+    lazily so this module imports cleanly without it.
     """
 
     def __init__(
         self,
         *,
         api_key: str,
-        endpoint: str,
-        deployment: str,
-        api_version: str = "2024-06-01",
+        model: str,
+        base_url: str | None = None,
     ) -> None:
         self._api_key = api_key
-        self._endpoint = endpoint
-        self._deployment = deployment
-        self._api_version = api_version
+        self._model = model
+        self._base_url = base_url
         self._client = None
 
     @property
     def model_name(self) -> str:
-        return self._deployment
+        return self._model
 
     def _get_client(self):
         if self._client is None:
-            from openai import AsyncAzureOpenAI  # lazy: optional dependency
+            from openai import AsyncOpenAI  # lazy: optional dependency
 
-            self._client = AsyncAzureOpenAI(
-                api_key=self._api_key,
-                azure_endpoint=self._endpoint,
-                api_version=self._api_version,
+            self._client = AsyncOpenAI(
+                api_key=self._api_key, base_url=self._base_url
             )
         return self._client
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         client = self._get_client()
         response = await client.embeddings.create(
-            model=self._deployment, input=texts
+            model=self._model, input=texts
         )
         return [item.embedding for item in response.data]
 
@@ -121,18 +120,13 @@ class AzureEmbedder:
 def build_embedder(settings: Settings) -> Embedder:
     """Construct the default embedder for the given settings.
 
-    Uses Azure when an embedding deployment is configured; otherwise falls back
-    to the deterministic offline ``FakeEmbedder``.
+    Uses the OpenAI-compatible embedder when a key and model are configured;
+    otherwise falls back to the deterministic offline ``FakeEmbedder``.
     """
-    if (
-        settings.azure_openai_api_key
-        and settings.azure_openai_endpoint
-        and settings.azure_openai_embedding_deployment
-    ):
-        return AzureEmbedder(
-            api_key=settings.azure_openai_api_key,
-            endpoint=settings.azure_openai_endpoint,
-            deployment=settings.azure_openai_embedding_deployment,
-            api_version=settings.azure_openai_api_version,
+    if settings.embedding_api_key and settings.embedding_model:
+        return OpenAIEmbedder(
+            api_key=settings.embedding_api_key,
+            model=settings.embedding_model,
+            base_url=settings.embedding_base_url,
         )
     return FakeEmbedder()

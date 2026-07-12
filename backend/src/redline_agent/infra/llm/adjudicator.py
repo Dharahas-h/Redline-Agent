@@ -8,7 +8,8 @@ adjudicator is a Protocol (decision #7: the LLM is swappable) and only ever
 change (decision #1 — the differ remains the sole authority on what changed).
 
 ``FakeAdjudicator`` is the offline, deterministic stand-in used by tests. The
-real Azure OpenAI implementation lives beside it and imports its client lazily.
+real OpenAI-compatible implementation lives beside it and imports its client
+lazily.
 """
 
 from __future__ import annotations
@@ -107,35 +108,31 @@ def _user_prompt(request: AdjudicationRequest) -> str:
     )
 
 
-class AzureOpenAIAdjudicator:
-    """Adjudicates an ambiguous pairing with an Azure OpenAI chat deployment."""
+class OpenAIAdjudicator:
+    """Adjudicates an ambiguous pairing with an OpenAI-compatible chat model."""
 
     def __init__(
         self,
         *,
         api_key: str,
-        endpoint: str,
-        deployment: str,
-        api_version: str = "2024-06-01",
+        model: str,
+        base_url: str | None = None,
     ) -> None:
         self._api_key = api_key
-        self._endpoint = endpoint
-        self._deployment = deployment
-        self._api_version = api_version
+        self._model = model
+        self._base_url = base_url
         self._client = None
 
     @property
     def model_name(self) -> str:
-        return self._deployment
+        return self._model
 
     def _get_client(self):
         if self._client is None:
-            from openai import AsyncAzureOpenAI  # lazy: optional dependency
+            from openai import AsyncOpenAI  # lazy: optional dependency
 
-            self._client = AsyncAzureOpenAI(
-                api_key=self._api_key,
-                azure_endpoint=self._endpoint,
-                api_version=self._api_version,
+            self._client = AsyncOpenAI(
+                api_key=self._api_key, base_url=self._base_url
             )
         return self._client
 
@@ -144,8 +141,7 @@ class AzureOpenAIAdjudicator:
 
         client = self._get_client()
         response = await client.chat.completions.create(
-            model=self._deployment,
-            temperature=0,
+            model=self._model,
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": _SYSTEM_PROMPT},
@@ -163,20 +159,15 @@ class AzureOpenAIAdjudicator:
 def build_adjudicator(settings: Settings) -> AlignmentAdjudicator | None:
     """Construct the default adjudicator for the given settings.
 
-    Uses Azure OpenAI when a chat deployment is configured; otherwise returns
-    ``None``. With no adjudicator, the aligner keeps its best embedding guess for
-    ambiguous clauses but flags it low-confidence for human review, rather than
-    letting a stand-in model silently decide (decision #5).
+    Uses the OpenAI-compatible chat model when a key and model are configured;
+    otherwise returns ``None``. With no adjudicator, the aligner keeps its best
+    embedding guess for ambiguous clauses but flags it low-confidence for human
+    review, rather than letting a stand-in model silently decide (decision #5).
     """
-    if (
-        settings.azure_openai_api_key
-        and settings.azure_openai_endpoint
-        and settings.azure_openai_deployment
-    ):
-        return AzureOpenAIAdjudicator(
-            api_key=settings.azure_openai_api_key,
-            endpoint=settings.azure_openai_endpoint,
-            deployment=settings.azure_openai_deployment,
-            api_version=settings.azure_openai_api_version,
+    if settings.openai_api_key and settings.openai_model:
+        return OpenAIAdjudicator(
+            api_key=settings.openai_api_key,
+            model=settings.openai_model,
+            base_url=settings.openai_base_url,
         )
     return None

@@ -26,7 +26,7 @@ async def client():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     app = create_app(
-        settings=Settings(default_tenant_id="test"),
+        settings=Settings(_env_file=None, default_tenant_id="test"),
         blob_store=InMemoryBlobStore(),
         engine=engine,
     )
@@ -219,7 +219,7 @@ async def annotating_client():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     app = create_app(
-        settings=Settings(default_tenant_id="test"),
+        settings=Settings(_env_file=None, default_tenant_id="test"),
         blob_store=InMemoryBlobStore(),
         engine=engine,
         interpreter=FakeInterpreter(

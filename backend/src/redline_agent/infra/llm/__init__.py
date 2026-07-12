@@ -1,9 +1,10 @@
 """LLM Protocols and implementations (decision #7: swappable behind a Protocol).
 
-``build_interpreter`` picks the Azure OpenAI implementation when it is
-configured, and otherwise falls back to the deterministic ``FakeInterpreter``
-so the service runs offline in local dev (mirroring the SQLite fallback for the
-database — an environment convenience, not a scope change).
+``build_interpreter`` picks the OpenAI-compatible implementation when a key and
+model are configured, and otherwise falls back to the deterministic
+``FakeInterpreter`` so the service runs offline in local dev (mirroring the
+SQLite fallback for the database — an environment convenience, not a scope
+change).
 """
 
 from __future__ import annotations
@@ -27,17 +28,12 @@ __all__ = [
 
 def build_interpreter(settings: Settings) -> LLMInterpreter:
     """Construct the default interpreter for the given settings."""
-    if (
-        settings.azure_openai_api_key
-        and settings.azure_openai_endpoint
-        and settings.azure_openai_deployment
-    ):
-        from redline_agent.infra.llm.azure_openai import AzureOpenAIInterpreter
+    if settings.openai_api_key and settings.openai_model:
+        from redline_agent.infra.llm.openai_chat import OpenAIInterpreter
 
-        return AzureOpenAIInterpreter(
-            api_key=settings.azure_openai_api_key,
-            endpoint=settings.azure_openai_endpoint,
-            deployment=settings.azure_openai_deployment,
-            api_version=settings.azure_openai_api_version,
+        return OpenAIInterpreter(
+            api_key=settings.openai_api_key,
+            model=settings.openai_model,
+            base_url=settings.openai_base_url,
         )
     return FakeInterpreter()

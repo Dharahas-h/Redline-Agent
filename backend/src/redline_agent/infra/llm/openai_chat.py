@@ -1,9 +1,11 @@
-"""Azure OpenAI implementation of the LLMInterpreter Protocol.
+"""OpenAI-compatible implementation of the LLMInterpreter Protocol.
 
-This is the default interpreter in deployment (decision #7). It is never
-exercised by tests (no test hits the network — the ``FakeInterpreter`` stands
-in); the ``openai`` client is imported lazily so this module imports cleanly
-even when the package or credentials are absent.
+This is the default interpreter in deployment (decision #7). It drives any
+OpenAI-compatible chat endpoint through the standard ``AsyncOpenAI`` client:
+leave ``base_url`` unset for api.openai.com, or point it at an Azure AI Foundry
+``/openai/v1/`` endpoint. It is never exercised by tests (no test hits the
+network — the ``FakeInterpreter`` stands in); the ``openai`` client is imported
+lazily so this module imports cleanly even when the package is absent.
 
 Enterprise no-training / data-residency terms are a gating requirement for the
 provider handling legal documents; confirming them is the human-in-the-loop
@@ -50,43 +52,38 @@ def _user_prompt(request: InterpretationRequest) -> str:
     )
 
 
-class AzureOpenAIInterpreter:
-    """Interprets a change with an Azure OpenAI chat deployment."""
+class OpenAIInterpreter:
+    """Interprets a change with an OpenAI-compatible chat model."""
 
     def __init__(
         self,
         *,
         api_key: str,
-        endpoint: str,
-        deployment: str,
-        api_version: str = "2024-06-01",
+        model: str,
+        base_url: str | None = None,
     ) -> None:
         self._api_key = api_key
-        self._endpoint = endpoint
-        self._deployment = deployment
-        self._api_version = api_version
+        self._model = model
+        self._base_url = base_url
         self._client = None
 
     @property
     def model_name(self) -> str:
-        return self._deployment
+        return self._model
 
     def _get_client(self):
         if self._client is None:
-            from openai import AsyncAzureOpenAI  # lazy: optional dependency
+            from openai import AsyncOpenAI  # lazy: optional dependency
 
-            self._client = AsyncAzureOpenAI(
-                api_key=self._api_key,
-                azure_endpoint=self._endpoint,
-                api_version=self._api_version,
+            self._client = AsyncOpenAI(
+                api_key=self._api_key, base_url=self._base_url
             )
         return self._client
 
     async def interpret(self, request: InterpretationRequest) -> Interpretation:
         client = self._get_client()
         response = await client.chat.completions.create(
-            model=self._deployment,
-            temperature=0,
+            model=self._model,
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": _SYSTEM_PROMPT},
