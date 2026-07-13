@@ -14,10 +14,13 @@ reflects lexical overlap deterministically and without hash collisions.
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Protocol
 
 from redline_agent.config import Settings
+
+logger = logging.getLogger(__name__)
 
 _TOKEN = re.compile(r"\w+")
 
@@ -110,11 +113,15 @@ class OpenAIEmbedder:
         return self._client
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
-        client = self._get_client()
-        response = await client.embeddings.create(
-            model=self._model, input=texts
-        )
-        return [item.embedding for item in response.data]
+        try:
+            client = self._get_client()
+            response = await client.embeddings.create(
+                model=self._model, input=texts
+            )
+            return [item.embedding for item in response.data]
+        except Exception:
+            logger.exception("Embedding request failed (model=%s)", self._model)
+            raise
 
 
 def build_embedder(settings: Settings) -> Embedder:
@@ -124,6 +131,7 @@ def build_embedder(settings: Settings) -> Embedder:
     otherwise falls back to the deterministic offline ``FakeEmbedder``.
     """
     if settings.embedding_api_key and settings.embedding_model:
+        print("Using Open Ai Embedder")
         return OpenAIEmbedder(
             api_key=settings.embedding_api_key,
             model=settings.embedding_model,

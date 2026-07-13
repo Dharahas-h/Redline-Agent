@@ -9,6 +9,8 @@ export default defineConfig({
       "/negotiations": "http://localhost:8000",
       "/rounds": "http://localhost:8000",
       "/changes": "http://localhost:8000",
+      "/clauses": "http://localhost:8000",
+      "/exports": "http://localhost:8000",
     },
   },
   test: {
