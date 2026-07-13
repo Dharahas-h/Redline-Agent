@@ -17,6 +17,7 @@ DB, a fixture .docx drives the whole spine.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -46,10 +47,60 @@ from redline_agent.repositories.repos import (
     ChangeRepository,
     ClauseLineageRepository,
     ClauseRepository,
+    ExportRepository,
     NegotiationRepository,
     RoundRepository,
     StructuralAlertRepository,
 )
+
+logger = logging.getLogger(__name__)
+
+# Statuses a round must be in to be deletable: the pipeline has settled, so a
+# delete cannot race the background processing task.
+_DELETABLE_STATUSES = (RoundStatus.READY, RoundStatus.FAILED)
+
+
+class RoundNotDeletableError(Exception):
+    """Raised when a round cannot be deleted (not latest, or still processing)."""
+
+
+async def purge_round(
+    session: AsyncSession, round_: Round, tenant_id: str
+) -> list[str]:
+    """Delete every DB row belonging to ``round_`` and return blob URIs to remove.
+
+    Children are removed before parents (referencing rows first) so the cascade
+    is safe under real FK enforcement. Blobs are *not* touched here — the caller
+    deletes them best-effort after the DB transaction commits (the DB is the
+    source of truth, so a stranded blob is preferable to a failed delete).
+    Shared by round-delete and negotiation-delete so the cascade lives in one
+    place.
+    """
+    blob_uris: list[str] = []
+    if round_.blob_uri:
+        blob_uris.append(round_.blob_uri)
+    blob_uris.extend(
+        await ExportRepository(session).delete_for_round(round_.id, tenant_id)
+    )
+    await StructuralAlertRepository(session).delete_for_round(round_.id, tenant_id)
+    await ChangeRepository(session).delete_for_round(round_.id, tenant_id)
+    await ClauseLineageRepository(session).delete_for_round(round_.id, tenant_id)
+    await ClauseRepository(session).delete_for_round(round_.id, tenant_id)
+    await RoundRepository(session).delete(round_.id, tenant_id)
+    return blob_uris
+
+
+def delete_blobs(blob_store: BlobStore, blob_uris: list[str]) -> None:
+    """Best-effort blob removal: a failure is logged, never raised.
+
+    The DB rows are already committed by the time this runs, so a blob-store
+    failure must not surface as an error — the round is logically deleted.
+    """
+    for uri in blob_uris:
+        try:
+            blob_store.delete(uri)
+        except Exception:  # noqa: BLE001 - the DB rows are already gone
+            logger.warning("Failed to delete blob %s", uri, exc_info=True)
 
 
 @dataclass
@@ -398,6 +449,39 @@ class RoundService:
             if c.id not in used_prev:
                 pairs.append(AlignmentPair(prev=c, curr=None))
         return pairs
+
+    async def delete_round(
+        self, negotiation_id: int, round_id: int, tenant_id: str
+    ) -> bool:
+        """Hard-delete the latest round of a negotiation and its blobs.
+
+        Returns ``False`` if the round is unknown or not part of this
+        negotiation/tenant (the router maps that to 404). Raises
+        ``RoundNotDeletableError`` (mapped to 409) if the round is not the
+        latest, or is still ``pending``/``processing``.
+        """
+        async with self._session_factory() as session:
+            rounds = RoundRepository(session)
+            round_ = await rounds.get(round_id, tenant_id)
+            if round_ is None or round_.negotiation_id != negotiation_id:
+                return False
+
+            all_rounds = await rounds.list_for_negotiation(negotiation_id, tenant_id)
+            latest = all_rounds[-1] if all_rounds else None
+            if latest is None or latest.id != round_id:
+                raise RoundNotDeletableError(
+                    "Only the latest round of a negotiation can be deleted."
+                )
+            if round_.status not in _DELETABLE_STATUSES:
+                raise RoundNotDeletableError(
+                    "This round is still processing; try again once it is ready."
+                )
+
+            blob_uris = await purge_round(session, round_, tenant_id)
+            await session.commit()
+
+        delete_blobs(self._blob_store, blob_uris)
+        return True
 
     async def _mark_failed(self, round_id: int) -> None:
         async with self._session_factory() as session:

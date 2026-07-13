@@ -11,8 +11,14 @@ from redline_agent.domain import (
 )
 from redline_agent.infra.llm.interpreter import FakeInterpreter
 from redline_agent.services.change_query import ChangeQueryService
-from redline_agent.services.negotiation import NegotiationService
-from redline_agent.services.round_service import RoundService
+from redline_agent.services.negotiation import (
+    NegotiationNotDeletableError,
+    NegotiationService,
+)
+from redline_agent.services.round_service import (
+    RoundNotDeletableError,
+    RoundService,
+)
 from tests.conftest import TENANT
 from tests.fixtures.docx_builder import make_docx
 
@@ -186,3 +192,106 @@ async def test_tenant_isolation_hides_other_tenants_feed(services):
     r2 = await _upload(rounds, neg.id, "Seller", ROUND_2)
 
     assert await feed.feed(r2.id, "other-tenant") == []
+
+
+async def test_delete_latest_round_removes_rows_and_blob(services, blob_store):
+    negotiations, rounds, feed = services
+    neg = await negotiations.create("Acme MSA", "Buyer", TENANT)
+    await _upload(rounds, neg.id, "Buyer", ROUND_1)
+    r2 = await _upload(rounds, neg.id, "Seller", ROUND_2)
+    assert r2.blob_uri in blob_store._data or r2.blob_uri.split("://", 1)[-1] in blob_store._data
+
+    ok = await rounds.delete_round(neg.id, r2.id, TENANT)
+    assert ok is True
+
+    remaining = await negotiations.list_rounds(neg.id, TENANT)
+    assert [r.round_no for r in remaining] == [1]
+    # The round's changes are gone with it.
+    assert await feed.feed(r2.id, TENANT) == []
+    # Its blob was removed from the store.
+    assert r2.blob_uri.split("://", 1)[-1] not in blob_store._data
+
+
+async def test_deleted_round_number_is_reused_on_reupload(services):
+    negotiations, rounds, _ = services
+    neg = await negotiations.create("Acme MSA", "Buyer", TENANT)
+    await _upload(rounds, neg.id, "Buyer", ROUND_1)
+    r2 = await _upload(rounds, neg.id, "Seller", ROUND_2)
+    assert r2.round_no == 2
+
+    await rounds.delete_round(neg.id, r2.id, TENANT)
+    r2b = await _upload(rounds, neg.id, "Seller", ROUND_2)
+    assert r2b.round_no == 2
+
+
+async def test_cannot_delete_non_latest_round(services):
+    negotiations, rounds, _ = services
+    neg = await negotiations.create("Acme MSA", "Buyer", TENANT)
+    r1 = await _upload(rounds, neg.id, "Buyer", ROUND_1)
+    await _upload(rounds, neg.id, "Seller", ROUND_2)
+
+    with pytest.raises(RoundNotDeletableError):
+        await rounds.delete_round(neg.id, r1.id, TENANT)
+
+
+async def test_cannot_delete_round_that_is_still_processing(services):
+    negotiations, rounds, _ = services
+    neg = await negotiations.create("Acme MSA", "Buyer", TENANT)
+    # create_round leaves the round PENDING (the pipeline has not run yet).
+    pending = await rounds.create_round(neg.id, "Buyer", "r1.docx", ROUND_1, TENANT)
+    assert pending.status is RoundStatus.PENDING
+
+    with pytest.raises(RoundNotDeletableError):
+        await rounds.delete_round(neg.id, pending.id, TENANT)
+
+
+async def test_delete_round_unknown_or_foreign_tenant_returns_false(services):
+    negotiations, rounds, _ = services
+    neg = await negotiations.create("Acme MSA", "Buyer", TENANT)
+    r1 = await _upload(rounds, neg.id, "Buyer", ROUND_1)
+
+    assert await rounds.delete_round(neg.id, 999999, TENANT) is False
+    assert await rounds.delete_round(neg.id, r1.id, "other-tenant") is False
+
+
+async def test_delete_negotiation_cascades_rounds_and_blobs(
+    session_factory, blob_store, interpreter
+):
+    negotiations = NegotiationService(session_factory, blob_store)
+    rounds = RoundService(session_factory, blob_store, interpreter)
+    feed = ChangeQueryService(session_factory)
+    neg = await negotiations.create("Acme MSA", "Buyer", TENANT)
+    await _upload(rounds, neg.id, "Buyer", ROUND_1)
+    r2 = await _upload(rounds, neg.id, "Seller", ROUND_2)
+
+    ok = await negotiations.delete(neg.id, TENANT)
+    assert ok is True
+
+    assert await negotiations.get(neg.id, TENANT) is None
+    assert await negotiations.list_rounds(neg.id, TENANT) == []
+    assert await feed.feed(r2.id, TENANT) == []
+    # Every round blob is gone.
+    assert blob_store._data == {}
+
+
+async def test_delete_negotiation_blocked_while_round_processing(
+    session_factory, blob_store, interpreter
+):
+    negotiations = NegotiationService(session_factory, blob_store)
+    rounds = RoundService(session_factory, blob_store, interpreter)
+    neg = await negotiations.create("Acme MSA", "Buyer", TENANT)
+    # A round left PENDING (pipeline not run) must block the delete.
+    await rounds.create_round(neg.id, "Buyer", "r1.docx", ROUND_1, TENANT)
+
+    with pytest.raises(NegotiationNotDeletableError):
+        await negotiations.delete(neg.id, TENANT)
+
+
+async def test_delete_negotiation_unknown_or_foreign_tenant_returns_false(
+    session_factory, blob_store
+):
+    negotiations = NegotiationService(session_factory, blob_store)
+    neg = await negotiations.create("Acme MSA", "Buyer", TENANT)
+
+    assert await negotiations.delete(999999, TENANT) is False
+    assert await negotiations.delete(neg.id, "other-tenant") is False

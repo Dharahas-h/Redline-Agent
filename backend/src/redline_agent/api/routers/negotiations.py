@@ -9,6 +9,7 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Response,
     UploadFile,
 )
 
@@ -23,8 +24,14 @@ from redline_agent.deps import (
     get_round_service,
     get_tenant_id,
 )
-from redline_agent.services.negotiation import NegotiationService
-from redline_agent.services.round_service import RoundService
+from redline_agent.services.negotiation import (
+    NegotiationNotDeletableError,
+    NegotiationService,
+)
+from redline_agent.services.round_service import (
+    RoundNotDeletableError,
+    RoundService,
+)
 
 router = APIRouter(tags=["negotiations"])
 
@@ -102,3 +109,36 @@ async def upload_round(
     )
     background.add_task(rounds.process_round, created.id, tenant_id)
     return RoundOut.of(created)
+
+
+@router.delete(
+    "/negotiations/{negotiation_id}/rounds/{round_id}", status_code=204
+)
+async def delete_round(
+    negotiation_id: int,
+    round_id: int,
+    rounds: RoundService = Depends(get_round_service),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    try:
+        deleted = await rounds.delete_round(negotiation_id, round_id, tenant_id)
+    except RoundNotDeletableError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Round not found")
+    return Response(status_code=204)
+
+
+@router.delete("/negotiations/{negotiation_id}", status_code=204)
+async def delete_negotiation(
+    negotiation_id: int,
+    service: NegotiationService = Depends(get_negotiation_service),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    try:
+        deleted = await service.delete(negotiation_id, tenant_id)
+    except NegotiationNotDeletableError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Negotiation not found")
+    return Response(status_code=204)

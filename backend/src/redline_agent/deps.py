@@ -20,7 +20,9 @@ def get_tenant_id(request: Request) -> str:
 
 
 def get_negotiation_service(request: Request) -> NegotiationService:
-    return NegotiationService(request.app.state.session_factory)
+    return NegotiationService(
+        request.app.state.session_factory, request.app.state.blob_store
+    )
 
 
 def get_round_service(request: Request) -> RoundService:

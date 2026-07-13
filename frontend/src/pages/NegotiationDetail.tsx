@@ -6,18 +6,27 @@ import {
   CardActionArea,
   Chip,
   CircularProgress,
+  IconButton,
   Paper,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import UploadIcon from "@mui/icons-material/UploadFileRounded";
-import { getNegotiation, listRounds, uploadRound } from "../api/client";
+import DeleteIcon from "@mui/icons-material/DeleteOutlineRounded";
+import {
+  deleteRound,
+  getNegotiation,
+  listRounds,
+  uploadRound,
+} from "../api/client";
 import type { NegotiationDetail as Detail, Round } from "../types";
 import { ChangeFeed } from "../components/ChangeFeed";
 import { ExportButton } from "../components/ExportButton";
 import Eyebrow from "../components/common/Eyebrow";
 import SerifHeading from "../components/common/SerifHeading";
+import { ConfirmDialog } from "../components/common/ConfirmDialog";
 import { C } from "../components/common/redline";
 
 export function NegotiationDetail({ negotiationId }: { negotiationId: number }) {
@@ -26,11 +35,32 @@ export function NegotiationDetail({ negotiationId }: { negotiationId: number }) 
   const [party, setParty] = useState("");
   const [fileName, setFileName] = useState("");
   const [selectedRound, setSelectedRound] = useState<number | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Round | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const refresh = async () => {
     setDetail(await getNegotiation(negotiationId));
     setRounds(await listRounds(negotiationId));
+  };
+
+  // Only the latest round is deletable, and only once its pipeline has settled
+  // (ready/failed) — mirrors the backend's guards.
+  const latestRoundId = rounds.length ? rounds[rounds.length - 1].id : null;
+  const isDeletable = (r: Round) =>
+    r.id === latestRoundId && (r.status === "ready" || r.status === "failed");
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      await deleteRound(negotiationId, pendingDelete.id);
+      if (selectedRound === pendingDelete.id) setSelectedRound(null);
+      setPendingDelete(null);
+      await refresh();
+    } finally {
+      setDeleting(false);
+    }
   };
   useEffect(() => {
     refresh();
@@ -127,6 +157,8 @@ export function NegotiationDetail({ negotiationId }: { negotiationId: number }) 
                   key={r.id}
                   variant="outlined"
                   sx={{
+                    display: "flex",
+                    alignItems: "stretch",
                     borderColor: active ? C.cobalt : C.cloud,
                     bgcolor: active ? C.primaryWash : "background.paper",
                   }}
@@ -138,6 +170,7 @@ export function NegotiationDetail({ negotiationId }: { negotiationId: number }) 
                       display: "flex",
                       justifyContent: "space-between",
                       gap: 2,
+                      flexGrow: 1,
                     }}
                   >
                     <Typography sx={{ fontWeight: 600 }}>
@@ -154,6 +187,19 @@ export function NegotiationDetail({ negotiationId }: { negotiationId: number }) 
                       }}
                     />
                   </CardActionArea>
+                  {isDeletable(r) && (
+                    <Box sx={{ display: "flex", alignItems: "center", pr: 1 }}>
+                      <Tooltip title="Delete latest round">
+                        <IconButton
+                          aria-label={`delete-round-${r.id}`}
+                          onClick={() => setPendingDelete(r)}
+                          color="error"
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  )}
                 </Card>
               );
             })}
@@ -162,6 +208,21 @@ export function NegotiationDetail({ negotiationId }: { negotiationId: number }) 
       </Box>
 
       {selectedRound !== null && <ChangeFeed roundId={selectedRound} />}
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete latest round?"
+        message={
+          pendingDelete
+            ? `This permanently deletes round ${pendingDelete.round_no} ` +
+              `(${pendingDelete.submitted_by_party}) along with its changes, ` +
+              `alerts, and any exports. This cannot be undone.`
+            : ""
+        }
+        busy={deleting}
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </Stack>
   );
 }

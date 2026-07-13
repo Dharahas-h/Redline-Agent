@@ -406,6 +406,69 @@ async def test_patch_alignment_unknown_round_returns_404(client):
     assert resp.status_code == 404
 
 
+async def test_delete_latest_round_returns_204_and_shrinks_negotiation(client):
+    neg = (
+        await client.post(
+            "/negotiations", json={"title": "M", "represented_party": "Buyer"}
+        )
+    ).json()
+    await _upload(client, neg["id"], "Buyer", ROUND_1)
+    r2 = await _upload(client, neg["id"], "Seller", ROUND_2)
+    round2_id = r2.json()["id"]
+
+    resp = await client.delete(f"/negotiations/{neg['id']}/rounds/{round2_id}")
+    assert resp.status_code == 204
+
+    detail = (await client.get(f"/negotiations/{neg['id']}")).json()
+    assert [r["round_no"] for r in detail["rounds"]] == [1]
+    # The deleted round's feed is now unknown.
+    assert (await client.get(f"/rounds/{round2_id}/changes")).status_code == 404
+
+
+async def test_delete_non_latest_round_returns_409(client):
+    neg = (
+        await client.post(
+            "/negotiations", json={"title": "M", "represented_party": "Buyer"}
+        )
+    ).json()
+    r1 = await _upload(client, neg["id"], "Buyer", ROUND_1)
+    await _upload(client, neg["id"], "Seller", ROUND_2)
+
+    resp = await client.delete(
+        f"/negotiations/{neg['id']}/rounds/{r1.json()['id']}"
+    )
+    assert resp.status_code == 409
+
+
+async def test_delete_unknown_round_returns_404(client):
+    neg = (
+        await client.post(
+            "/negotiations", json={"title": "M", "represented_party": "Buyer"}
+        )
+    ).json()
+    resp = await client.delete(f"/negotiations/{neg['id']}/rounds/999999")
+    assert resp.status_code == 404
+
+
+async def test_delete_negotiation_returns_204_and_is_gone(client):
+    neg = (
+        await client.post(
+            "/negotiations", json={"title": "M", "represented_party": "Buyer"}
+        )
+    ).json()
+    await _upload(client, neg["id"], "Buyer", ROUND_1)
+    await _upload(client, neg["id"], "Seller", ROUND_2)
+
+    resp = await client.delete(f"/negotiations/{neg['id']}")
+    assert resp.status_code == 204
+    assert (await client.get(f"/negotiations/{neg['id']}")).status_code == 404
+    assert (await client.get("/negotiations")).json() == []
+
+
+async def test_delete_unknown_negotiation_returns_404(client):
+    assert (await client.delete("/negotiations/999999")).status_code == 404
+
+
 async def test_patch_alignment_rejects_foreign_clause(client):
     neg = (
         await client.post(

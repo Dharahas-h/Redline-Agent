@@ -131,6 +131,12 @@ class NegotiationRepository:
         rows = (await self._session.scalars(stmt)).all()
         return [_to_negotiation(r) for r in rows]
 
+    async def delete(self, negotiation_id: int, tenant_id: str) -> None:
+        row = await self._session.get(NegotiationRow, negotiation_id)
+        if row is not None and row.tenant_id == tenant_id:
+            await self._session.delete(row)
+            await self._session.flush()
+
 
 class RoundRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -192,6 +198,12 @@ class RoundRepository:
             row.status = status.value
             await self._session.flush()
 
+    async def delete(self, round_id: int, tenant_id: str) -> None:
+        row = await self._session.get(RoundRow, round_id)
+        if row is not None and row.tenant_id == tenant_id:
+            await self._session.delete(row)
+            await self._session.flush()
+
 
 class ClauseRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -228,6 +240,14 @@ class ClauseRepository:
         if row is None or row.tenant_id != tenant_id:
             return None
         return _to_clause(row)
+
+    async def delete_for_round(self, round_id: int, tenant_id: str) -> None:
+        stmt = select(ClauseRow).where(
+            ClauseRow.round_id == round_id, ClauseRow.tenant_id == tenant_id
+        )
+        for row in (await self._session.scalars(stmt)).all():
+            await self._session.delete(row)
+        await self._session.flush()
 
 
 def _to_lineage(row: ClauseLineageRow) -> ClauseLineage:
@@ -306,6 +326,24 @@ class ClauseLineageRepository:
         rows = (await self._session.scalars(stmt)).all()
         return [_to_lineage(r) for r in rows]
 
+    async def delete_for_round(self, round_id: int, tenant_id: str) -> None:
+        """Drop lineage links whose current clause belongs to ``round_id``.
+
+        The latest round is never a ``prev`` clause (nothing was diffed against
+        it yet), so its links are exactly those keyed by its current clauses.
+        """
+        stmt = (
+            select(ClauseLineageRow)
+            .join(ClauseRow, ClauseLineageRow.curr_clause_id == ClauseRow.id)
+            .where(
+                ClauseRow.round_id == round_id,
+                ClauseLineageRow.tenant_id == tenant_id,
+            )
+        )
+        for row in (await self._session.scalars(stmt)).all():
+            await self._session.delete(row)
+        await self._session.flush()
+
     async def update(self, lineage: ClauseLineage) -> ClauseLineage:
         row = await self._session.get(ClauseLineageRow, lineage.id)
         if row is not None and row.tenant_id == lineage.tenant_id:
@@ -353,6 +391,25 @@ class ExportRepository:
         if row is None or row.tenant_id != tenant_id:
             return None
         return _to_export(row)
+
+    async def delete_for_round(self, round_id: int, tenant_id: str) -> list[str]:
+        """Delete exports touching ``round_id`` and return their blob URIs.
+
+        Matches either endpoint so a round's exports are removed regardless of
+        whether it was the ``from`` or ``to`` side of the redline.
+        """
+        stmt = select(ExportRow).where(
+            ExportRow.tenant_id == tenant_id,
+            (ExportRow.to_round_id == round_id)
+            | (ExportRow.from_round_id == round_id),
+        )
+        blob_uris: list[str] = []
+        for row in (await self._session.scalars(stmt)).all():
+            if row.blob_uri:
+                blob_uris.append(row.blob_uri)
+            await self._session.delete(row)
+        await self._session.flush()
+        return blob_uris
 
 
 class ChangeRepository:

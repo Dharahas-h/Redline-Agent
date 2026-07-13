@@ -24,6 +24,10 @@ class BlobStore(Protocol):
         """Retrieve the bytes previously stored at ``uri``."""
         ...
 
+    def delete(self, uri: str) -> None:
+        """Remove the blob at ``uri``. A missing blob is not an error."""
+        ...
+
 
 class InMemoryBlobStore:
     """Process-local BlobStore for tests and single-process dev."""
@@ -40,6 +44,10 @@ class InMemoryBlobStore:
     def get(self, uri: str) -> bytes:
         key = uri.removeprefix(self._SCHEME)
         return self._data[key]
+
+    def delete(self, uri: str) -> None:
+        key = uri.removeprefix(self._SCHEME)
+        self._data.pop(key, None)
 
 
 class AzureBlobStore:
@@ -81,6 +89,16 @@ class AzureBlobStore:
         _container, _, key = path.partition("/")
         blob = self._container_client.get_blob_client(key)
         return blob.download_blob().readall()
+
+    def delete(self, uri: str) -> None:
+        from azure.core.exceptions import ResourceNotFoundError
+
+        path = uri.removeprefix(self._SCHEME)
+        _container, _, key = path.partition("/")
+        try:
+            self._container_client.get_blob_client(key).delete_blob()
+        except ResourceNotFoundError:
+            pass
 
 
 def build_blob_store(settings: Settings) -> BlobStore:

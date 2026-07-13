@@ -4,16 +4,24 @@ import {
   Button,
   Card,
   CardActionArea,
+  IconButton,
   Paper,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/AddRounded";
-import { createNegotiation, listNegotiations } from "../api/client";
+import DeleteIcon from "@mui/icons-material/DeleteOutlineRounded";
+import {
+  createNegotiation,
+  deleteNegotiation,
+  listNegotiations,
+} from "../api/client";
 import type { Negotiation } from "../types";
 import Eyebrow from "../components/common/Eyebrow";
 import SerifHeading from "../components/common/SerifHeading";
+import { ConfirmDialog } from "../components/common/ConfirmDialog";
 import { C } from "../components/common/redline";
 
 export function NegotiationList({
@@ -24,6 +32,8 @@ export function NegotiationList({
   const [items, setItems] = useState<Negotiation[]>([]);
   const [title, setTitle] = useState("");
   const [party, setParty] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<Negotiation | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const refresh = () => listNegotiations().then(setItems);
   useEffect(() => {
@@ -37,6 +47,18 @@ export function NegotiationList({
     setTitle("");
     setParty("");
     await refresh();
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      await deleteNegotiation(pendingDelete.id);
+      setPendingDelete(null);
+      await refresh();
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -106,10 +128,14 @@ export function NegotiationList({
       ) : (
         <Stack spacing={1.5}>
           {items.map((n) => (
-            <Card key={n.id} variant="outlined">
+            <Card
+              key={n.id}
+              variant="outlined"
+              sx={{ display: "flex", alignItems: "stretch" }}
+            >
               <CardActionArea
                 onClick={() => onSelect(n.id)}
-                sx={{ p: 2.5, display: "block" }}
+                sx={{ p: 2.5, display: "block", flexGrow: 1 }}
               >
                 <Typography variant="h6" sx={{ lineHeight: 1.2 }}>
                   {n.title} — representing {n.represented_party}
@@ -121,10 +147,35 @@ export function NegotiationList({
                   Open negotiation →
                 </Typography>
               </CardActionArea>
+              <Box sx={{ display: "flex", alignItems: "center", pr: 1.5 }}>
+                <Tooltip title="Delete negotiation">
+                  <IconButton
+                    aria-label={`delete-negotiation-${n.id}`}
+                    onClick={() => setPendingDelete(n)}
+                    color="error"
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                </Tooltip>
+              </Box>
             </Card>
           ))}
         </Stack>
       )}
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete negotiation?"
+        message={
+          pendingDelete
+            ? `This permanently deletes "${pendingDelete.title}" and every round, ` +
+              `change, and export beneath it. This cannot be undone.`
+            : ""
+        }
+        busy={deleting}
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </Stack>
   );
 }

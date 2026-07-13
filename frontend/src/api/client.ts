@@ -60,6 +60,32 @@ export async function listRounds(negotiationId: number): Promise<Round[]> {
   return json(await fetch(`${BASE}/negotiations/${negotiationId}/rounds`));
 }
 
+function expectNoContent(resp: Response): void {
+  if (!resp.ok) {
+    throw new Error(`${resp.status} ${resp.statusText}`);
+  }
+}
+
+// Delete the latest round of a negotiation (backend enforces latest-only and
+// that the round has finished processing).
+export async function deleteRound(
+  negotiationId: number,
+  roundId: number,
+): Promise<void> {
+  expectNoContent(
+    await fetch(`${BASE}/negotiations/${negotiationId}/rounds/${roundId}`, {
+      method: "DELETE",
+    }),
+  );
+}
+
+// Delete a whole negotiation and every round beneath it.
+export async function deleteNegotiation(negotiationId: number): Promise<void> {
+  expectNoContent(
+    await fetch(`${BASE}/negotiations/${negotiationId}`, { method: "DELETE" }),
+  );
+}
+
 export interface ChangeFeedFilters {
   materiality?: string;
   category?: string;
