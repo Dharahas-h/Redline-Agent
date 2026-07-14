@@ -27,10 +27,10 @@ export default function App() {
                 variant="subtitle1"
                 sx={{ fontWeight: 700, lineHeight: 1.1, letterSpacing: "-0.01em" }}
               >
-                Redline&nbsp;Agent
+                Contract Negotiation Intelligence
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                Contract negotiation intelligence
+                Redlining&nbsp;System
               </Typography>
             </Box>
             <Divider

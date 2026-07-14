@@ -66,7 +66,7 @@ export function NegotiationList({
       <Box>
         <Eyebrow>Negotiations</Eyebrow>
         <SerifHeading variant="h2" sx={{ mt: 1 }}>
-          Track every <em>redline</em> across rounds.
+          Track every <em>change</em> across rounds.
         </SerifHeading>
       </Box>
 
