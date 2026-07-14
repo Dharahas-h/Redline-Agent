@@ -194,7 +194,7 @@ export function ChangeFeed({ roundId }: { roundId: number }) {
             size="small"
             sx={{ minWidth: 170 }}
           >
-            <option value="">All categories</option>
+            <option value="" />
             {CATEGORY_OPTIONS.map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
@@ -211,7 +211,7 @@ export function ChangeFeed({ roundId }: { roundId: number }) {
             size="small"
             sx={{ minWidth: 170 }}
           >
-            <option value="">Either side</option>
+            <option value=""></option>
             {FAVORED_PARTY_OPTIONS.map(([value, label]) => (
               <option key={value} value={value}>
                 {label}

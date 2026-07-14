@@ -82,7 +82,7 @@ def _pair_replace(
     paired = min(i2 - i1, j2 - j1)
     for offset in range(paired):
         i, j = i1 + offset, j1 + offset
-        ratio = SequenceMatcher(a=prev[i], b=curr[j]).ratio()
+        ratio = SequenceMatcher(a=prev[i], b=curr[j], autojunk=False).ratio()
         if ratio >= threshold:
             ops.append(ParaOp("modified", i, j))
         else:
